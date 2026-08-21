@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#07101e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="DICERO.png">
+<title>DICE 6 — Last One Standing</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<div id="app">
+<header class="top">
+  <div class="brand"><img src="DICERO.png"><div><b>DICE 6</b><small>LAST ONE STANDING</small></div></div>
+  <div id="netBadge" class="badge offline">OFFLINE</div>
+</header>
+
+<section id="home" class="screen active">
+  <div class="hero card">
+    <img class="hero-logo" src="DICERO.png">
+    <div class="eyebrow">DICERO PRESENTS</div>
+    <h1>1 DICE. 6 PLAYERS.</h1>
+    <h2>LAST ONE STANDING WINS!</h2>
+    <p>Every player starts with ❤️❤️❤️. The dice number decides who loses a life.</p>
+    <div class="home-buttons">
+      <button id="goOnline" class="gold big">🌐 ONLINE GAME</button>
+      <button id="goOffline" class="dark big">🎮 OFFLINE GAME</button>
+    </div>
+    <button id="installBtn" class="install hidden">⬇ INSTALL DICE 6</button>
+    <div class="rules">❤️ 3 LIVES • 🎲 1–6 TARGET • ☠️ ELIMINATION • 🏆 WINNER</div>
+  </div>
+</section>
+
+<section id="setup" class="screen">
+  <div class="card setup">
+    <button class="back" id="backHome">← MAIN MENU</button>
+    <div class="head"><div><div class="eyebrow" id="setupEyebrow">OFFLINE</div><h2 id="setupTitle">Set up 6 players</h2></div><img src="DICERO.png"></div>
+
+    <div id="offlineSetup">
+      <div id="playerInputs" class="inputs"></div>
+      <button id="startOffline" class="gold wide">START GAME →</button>
+    </div>
+
+    <div id="onlineSetup" class="hidden">
+      <div class="identity">
+        <label>YOUR NAME<input id="myName" maxlength="18" placeholder="Player name"></label>
+        <label>YOUR CITY<input id="myCity" maxlength="24" placeholder="City"></label>
+      </div>
+      <div class="online-choice">
+        <button id="createRoom" class="gold big">CREATE ROOM</button>
+        <div class="or">OR</div>
+        <div class="join"><input id="roomInput" maxlength="6" placeholder="ROOM CODE"><button id="joinRoom" class="dark">JOIN ROOM</button></div>
+      </div>
+      <p class="note">Online mode needs an internet connection and the game must be opened from its HTTPS web link. Players do not need Node.js or a server.</p>
+      <div id="onlineStatus" class="statusBox">Ready to connect.</div>
+    </div>
+  </div>
+</section>
+
+<section id="lobby" class="screen">
+  <div class="card lobby">
+    <div class="head">
+      <div><div class="eyebrow">ONLINE LOBBY</div><h2>Waiting Room</h2><p id="lobbyText">Share the room code with your friends.</p></div>
+      <div class="room"><small>ROOM CODE</small><strong id="roomCode">------</strong><button id="copyRoom">COPY</button></div>
+    </div>
+    <div class="counts"><span id="count">1/6 PLAYERS</span><span id="readyCount">0/6 READY</span></div>
+    <div id="lobbyGrid" class="lobby-grid"></div>
+    <div class="lobby-actions"><span id="hostText">You are the host.</span><div><button id="readyBtn" class="dark">READY ✓</button><button id="startOnline" class="gold" disabled>START GAME</button></div></div>
+  </div>
+</section>
+
+<section id="game" class="screen">
+  <div class="game-top card"><div class="brand"><img src="DICERO.png"><div><b>DICE 6</b><small>LAST ONE STANDING</small></div></div><div class="counts"><span id="modeText">OFFLINE</span><span id="round">ROUND 1</span></div></div>
+  <div id="connectionNotice" class="connectionNotice hidden"></div>
+  <div id="board" class="board"></div>
+  <div class="arena card">
+    <div class="turn"><b id="turn">PLAYER 1'S TURN</b><span id="hint">Roll the dice</span></div>
+    <div class="diceWrap"><div id="dice" class="dice">1</div></div>
+    <button id="roll" class="roll gold">ROLL THE DICE</button>
+    <div id="result" class="result">The number decides who loses a life.</div>
+  </div>
+  <div class="logs card"><b>ROLL LOG</b><div id="log"></div></div>
+</section>
+
+<section id="winner" class="screen">
+  <div class="winner card">
+    <img src="DICERO.png">
+    <div class="eyebrow">GAME OVER</div><h1>🏆 WINNER</h1>
+    <div id="winnerAvatar" class="avatar">P1</div>
+    <h2 id="winnerName">Player 1</h2><p id="winnerCity">City</p><div id="winnerLives">❤️</div>
+    <div class="actions"><button id="again" class="gold big">PLAY AGAIN</button><button id="menu" class="dark big">MAIN MENU</button></div>
+  </div>
+</section>
+<div id="safetyModal" class="modal hidden">
+      <div class="modalCard">
+        <div class="eyebrow">PLAYER SAFETY</div>
+        <h2>Play Safely & Respectfully</h2>
+        <p>Use a nickname and avoid sharing phone numbers, addresses, passwords, or other private information in the game.</p>
+        <p>Only join rooms shared by people you trust. If you leave a room, simply close the game or return to the main menu.</p>
+        <button id="safetyOk" class="gold wide">I UNDERSTAND</button>
+      </div>
+    </div>
+    <div id="toast"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

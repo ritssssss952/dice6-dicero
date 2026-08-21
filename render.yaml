@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: dice6-dicero
+    env: docker
+    plan: free
+    healthCheckPath: /health

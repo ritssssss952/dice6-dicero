@@ -1,0 +1,9 @@
+{
+  "name":"dice6-dicero",
+  "version":"1.0.0",
+  "private":true,
+  "description":"DICE 6 — Last One Standing",
+  "main":"server.js",
+  "scripts":{"start":"node server.js"},
+  "engines":{"node":">=18"}
+}

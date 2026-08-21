@@ -1,0 +1,9 @@
+{
+"name":"DICE 6 — Last One Standing",
+"short_name":"DICE 6",
+"start_url":"./",
+"display":"standalone",
+"background_color":"#07101e",
+"theme_color":"#07101e",
+"icons":[{"src":"DICERO.png","sizes":"192x192","type":"image/png"},{"src":"DICERO.png","sizes":"512x512","type":"image/png"}]
+}
