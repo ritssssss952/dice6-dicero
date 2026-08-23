@@ -1,1 +1,34 @@
-const CACHE="dice6-online-v2";const A=["./","./index.html","./style.css","./app.js","./manifest.webmanifest","./DICERO.png"];self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(A))));self.addEventListener("fetch",e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).catch(()=>caches.match("./index.html")))));
+const CACHE_NAME = "dicero-no-cache-v3";
+
+self.addEventListener("install", event => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    Promise.all([
+      caches.keys().then(keys =>
+        Promise.all(
+          keys.map(key => caches.delete(key))
+        )
+      ),
+      self.clients.claim()
+    ])
+  );
+});
+
+self.addEventListener("fetch", event => {
+
+  if(event.request.method !== "GET")
+    return;
+
+  /*
+    Never serve old cached files.
+    Always get the newest game files from the server.
+  */
+
+  event.respondWith(
+    fetch(event.request)
+  );
+
+});
