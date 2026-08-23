@@ -63,7 +63,7 @@ function makeRoomCode(){return Math.random().toString(36).slice(2,8).toUpperCase
 function initPeerForHost(code,name,city){
  cleanPeer();status("Creating secure room…");
  S.host=true;S.room=code;
- S.peer=new Peer(code.toLowerCase(),{debug:0,secure:true,config:{iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:global.stun.twilio.com:3478?transport=udp"}]}});
+ S.peer=new Peer(code.toLowerCase(),{debug:0,secure:true,config:{iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:global.stun.twilio.com:3478"}]}});
  S.peer.on("open",id=>{
    S.myId=id;S.peerReady=true;S.mode="online";S.players=[{id,peer:null,slot:0,name,city,lives:3,alive:true,ready:false,isHost:true,connected:true}];
    badge(true);status("Room created. Share the code with 5 players.");renderLobby();show("lobby");
@@ -75,7 +75,7 @@ function initPeerForHost(code,name,city){
 function initPeerForJoin(code,name,city){
  cleanPeer();status("Connecting to room…");
  S.host=false;S.room=code;
- S.peer=new Peer(undefined,{debug:0,secure:true,config:{iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:global.stun.twilio.com:3478?transport=udp"}]}});
+ S.peer=new Peer(undefined,{debug:0,secure:true,config:{iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:"stun:global.stun.twilio.com:3478"}]}});
  S.peer.on("open",id=>{
    S.myId=id;S.peerReady=true;
    const c=S.peer.connect(code.toLowerCase(),{reliable:true});
