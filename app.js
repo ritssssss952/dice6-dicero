@@ -1,11 +1,19 @@
 (() => {
   const $ = id => document.getElementById(id);
 
-  const screens = ["home", "setup", "lobby", "game", "winner"];
+  const screens = [
+    "home",
+    "setup",
+    "lobby",
+    "game",
+    "winner"
+  ];
 
   const S = {
     mode: "offline",
+
     players: [],
+
     turn: 0,
     round: 1,
     started: false,
@@ -14,12 +22,15 @@
     host: false,
     myId: "",
 
-    eventSource: null,
-
     ready: false,
     rolling: false,
 
-    offlineNames: []
+    offlineNames: [],
+
+    pollTimer: null,
+    polling: false,
+
+    screen: "home"
   };
 
   const colors = [
@@ -36,54 +47,77 @@
      ===================================================== */
 
   const show = id => {
+
+    S.screen = id;
+
     screens.forEach(s => {
+
       const el = $(s);
-      if (el) el.classList.toggle("active", s === id);
+
+      if (el) {
+        el.classList.toggle(
+          "active",
+          s === id
+        );
+      }
     });
 
-    scrollTo(0, 0);
+    window.scrollTo(0, 0);
   };
 
-  function toast(t) {
+  function toast(text) {
+
     const e = $("toast");
+
     if (!e) return;
 
-    e.textContent = t;
+    e.textContent = text;
+
     e.classList.add("show");
 
-    clearTimeout(window.diceToastTimer);
+    clearTimeout(
+      window.diceToastTimer
+    );
 
-    window.diceToastTimer = setTimeout(() => {
-      e.classList.remove("show");
-    }, 2800);
+    window.diceToastTimer =
+      setTimeout(() => {
+        e.classList.remove("show");
+      }, 2800);
   }
 
-  function status(t) {
+  function status(text) {
+
     if ($("onlineStatus")) {
-      $("onlineStatus").textContent = t;
+      $("onlineStatus").textContent =
+        text;
     }
   }
 
   function badge(on) {
+
     if (!$("netBadge")) return;
 
-    $("netBadge").textContent = on ? "ONLINE" : "OFFLINE";
+    $("netBadge").textContent =
+      on ? "ONLINE" : "OFFLINE";
 
     $("netBadge").className =
-      "badge " + (on ? "online" : "offline");
+      "badge " +
+      (on ? "online" : "offline");
   }
 
-  function esc(s) {
-    return String(s || "").replace(
-      /[&<>"']/g,
-      x => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      }[x])
-    );
+  function esc(value) {
+
+    return String(value || "")
+      .replace(
+        /[&<>"']/g,
+        x => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[x])
+      );
   }
 
   /* =====================================================
@@ -91,53 +125,88 @@
      ===================================================== */
 
   function players6() {
-    return Array.from({ length: 6 }, (_, i) => ({
-      id: "p" + (i + 1),
-      slot: i,
-      name: "Player " + (i + 1),
-      city: "City " + (i + 1),
-      lives: 3,
-      alive: true,
-      ready: false,
-      isHost: i === 0
-    }));
+
+    return Array.from(
+      { length: 6 },
+      (_, i) => ({
+
+        id:
+          "p" + (i + 1),
+
+        slot:
+          i,
+
+        name:
+          "Player " + (i + 1),
+
+        city:
+          "City " + (i + 1),
+
+        lives:
+          3,
+
+        alive:
+          true,
+
+        ready:
+          false,
+
+        isHost:
+          i === 0
+      })
+    );
   }
 
   function makeInputs() {
-    const box = $("playerInputs");
+
+    const box =
+      $("playerInputs");
+
     if (!box) return;
 
     box.innerHTML =
-      Array.from({ length: 6 }, (_, i) => `
-        <div class="pinput">
-          <div class="num"
-               style="border:1px solid ${colors[i]}">
-            ${i + 1}
+      Array.from(
+        { length: 6 },
+        (_, i) => `
+
+          <div class="pinput">
+
+            <div
+              class="num"
+              style="border:1px solid ${colors[i]}"
+            >
+              ${i + 1}
+            </div>
+
+            <label>
+              PLAYER ${i + 1}
+
+              <input
+                id="pn${i}"
+                maxlength="18"
+                value="${esc(
+                  S.offlineNames[i]?.name ||
+                  `Player ${i + 1}`
+                )}"
+              >
+            </label>
+
+            <label>
+              CITY
+
+              <input
+                id="pc${i}"
+                maxlength="24"
+                value="${esc(
+                  S.offlineNames[i]?.city ||
+                  `City ${i + 1}`
+                )}"
+              >
+            </label>
+
           </div>
-
-          <label>
-            PLAYER ${i + 1}
-            <input
-              id="pn${i}"
-              maxlength="18"
-              value="${esc(
-                S.offlineNames[i]?.name ||
-                `Player ${i + 1}`
-              )}">
-          </label>
-
-          <label>
-            CITY
-            <input
-              id="pc${i}"
-              maxlength="24"
-              value="${esc(
-                S.offlineNames[i]?.city ||
-                `City ${i + 1}`
-              )}">
-          </label>
-        </div>
-      `).join("");
+        `
+      ).join("");
   }
 
   /* =====================================================
@@ -145,13 +214,18 @@
      ===================================================== */
 
   function renderLobby() {
-    const ps = S.players || [];
+
+    const ps =
+      S.players || [];
 
     const readyCount =
-      ps.filter(p => p.ready).length;
+      ps.filter(
+        p => p.ready
+      ).length;
 
     if ($("roomCode"))
-      $("roomCode").textContent = S.room;
+      $("roomCode").textContent =
+        S.room || "------";
 
     if ($("count"))
       $("count").textContent =
@@ -162,75 +236,115 @@
         `${readyCount}/6 READY`;
 
     if ($("lobbyText")) {
+
       if (ps.length < 6) {
-        const left = 6 - ps.length;
+
+        const left =
+          6 - ps.length;
 
         $("lobbyText").textContent =
-          `Waiting for ${left} more player${left === 1 ? "" : "s"}...`;
+          `Waiting for ${left} more player${
+            left === 1 ? "" : "s"
+          }...`;
+
       }
       else if (readyCount < 6) {
+
         $("lobbyText").textContent =
-          `All players joined. Waiting for ${6 - readyCount} READY.`;
+          `All players joined. Waiting for ${
+            6 - readyCount
+          } READY.`;
+
       }
       else {
+
         $("lobbyText").textContent =
           "All players READY. Host can start.";
+
       }
     }
 
     if ($("hostText")) {
+
       $("hostText").textContent =
         S.host
           ? "★ You are the HOST."
           : "Waiting for the HOST.";
+
     }
 
     if ($("lobbyGrid")) {
+
       $("lobbyGrid").innerHTML =
-        Array.from({ length: 6 }, (_, i) => {
+        Array.from(
+          { length: 6 },
+          (_, i) => {
 
-          const p =
-            ps.find(x => x.slot === i);
+            const p =
+              ps.find(
+                x => x.slot === i
+              );
 
-          if (!p) {
+            if (!p) {
+
+              return `
+                <div class="slot empty">
+                  PLAYER ${i + 1}<br>
+                  WAITING...
+                </div>
+              `;
+            }
+
             return `
-              <div class="slot empty">
-                PLAYER ${i + 1}<br>
-                WAITING...
+
+              <div class="slot">
+
+                <span>
+                  PLAYER ${i + 1}
+                </span>
+
+                <span
+                  class="status ${
+                    p.ready
+                      ? "ready"
+                      : "waiting"
+                  }"
+                >
+                  ${
+                    p.ready
+                      ? "READY"
+                      : "WAITING"
+                  }
+                </span>
+
+                <h3>
+                  ${esc(p.name)}
+                </h3>
+
+                <p>
+                  📍 ${esc(p.city)}
+                </p>
+
+                ${
+                  p.isHost
+                    ? '<div class="host">★ HOST</div>'
+                    : ""
+                }
+
               </div>
+
             `;
           }
-
-          return `
-            <div class="slot">
-
-              <span>PLAYER ${i + 1}</span>
-
-              <span class="status ${
-                p.ready ? "ready" : "waiting"
-              }">
-                ${p.ready ? "READY" : "WAITING"}
-              </span>
-
-              <h3>${esc(p.name)}</h3>
-
-              <p>📍 ${esc(p.city)}</p>
-
-              ${
-                p.isHost
-                  ? '<div class="host">★ HOST</div>'
-                  : ""
-              }
-
-            </div>
-          `;
-        }).join("");
+        ).join("");
     }
 
     const me =
-      ps.find(p => p.id === S.myId);
+      ps.find(
+        p => p.id === S.myId
+      );
 
     if ($("readyBtn")) {
+
       $("readyBtn").textContent =
         me?.ready
           ? "NOT READY"
@@ -241,6 +355,7 @@
     }
 
     if ($("startOnline")) {
+
       $("startOnline").disabled =
         !(
           S.host &&
@@ -255,18 +370,24 @@
      ===================================================== */
 
   function renderBoard() {
+
     if (!$("board")) return;
 
     $("board").innerHTML =
       S.players
         .slice()
-        .sort((a, b) => a.slot - b.slot)
+        .sort(
+          (a, b) =>
+            a.slot - b.slot
+        )
         .map(p => `
+
           <div class="
             player
             ${p.alive ? "" : "dead"}
             ${
-              p.slot === S.turn && p.alive
+              p.slot === S.turn &&
+              p.alive
                 ? "current"
                 : ""
             }
@@ -276,49 +397,76 @@
 
               <div
                 class="avatar"
-                style="border-color:${colors[p.slot]}"
+                style="border-color:${
+                  colors[p.slot]
+                }"
               >
                 P${p.slot + 1}
               </div>
 
               <div>
-                <h3>${esc(p.name)}</h3>
+
+                <h3>
+                  ${esc(p.name)}
+                </h3>
 
                 <div class="city">
                   📍 ${esc(p.city)}
                 </div>
+
               </div>
 
             </div>
 
             <div class="hearts">
-              ${[0, 1, 2].map(i => `
-                <span class="${
-                  i < p.lives ? "" : "empty"
-                }">
-                  ❤️
-                </span>
-              `).join("")}
+
+              ${[0, 1, 2]
+                .map(
+                  i => `
+                    <span class="${
+                      i < p.lives
+                        ? ""
+                        : "empty"
+                    }">
+                      ❤️
+                    </span>
+                  `
+                )
+                .join("")}
+
             </div>
 
             ${
-              p.slot === S.turn && p.alive
-                ? '<div class="currentlabel">CURRENT</div>'
+              p.slot === S.turn &&
+              p.alive
+                ? `
+                  <div class="currentlabel">
+                    CURRENT
+                  </div>
+                `
                 : ""
             }
 
             ${
               !p.alive
-                ? '<div class="deadlabel">ELIMINATED</div>'
+                ? `
+                  <div class="deadlabel">
+                    ELIMINATED
+                  </div>
+                `
                 : ""
             }
 
           </div>
+
         `).join("");
 
     if ($("round"))
       $("round").textContent =
-        `ROUND ${Math.max(1, S.round)}`;
+        `ROUND ${Math.max(
+          1,
+          S.round
+        )}`;
 
     const cur =
       S.players.find(
@@ -335,13 +483,16 @@
 
     if ($("hint"))
       $("hint").textContent =
-        cur ? "Roll the dice" : "";
+        cur
+          ? "Roll the dice"
+          : "";
 
     const mine =
       S.mode === "offline" ||
       cur?.id === S.myId;
 
     if ($("roll")) {
+
       $("roll").disabled =
         !S.started ||
         S.rolling ||
@@ -355,20 +506,31 @@
     }
   }
 
-  function log(t) {
+  function log(text) {
+
     if (!$("log")) return;
 
     const e =
-      document.createElement("div");
+      document.createElement(
+        "div"
+      );
 
-    e.className = "logitem";
-    e.textContent = t;
+    e.className =
+      "logitem";
+
+    e.textContent =
+      text;
 
     $("log").prepend(e);
   }
 
   function nextAlive(from) {
-    for (let n = 1; n <= 6; n++) {
+
+    for (
+      let n = 1;
+      n <= 6;
+      n++
+    ) {
 
       const slot =
         (from + n) % 6;
@@ -386,6 +548,7 @@
   }
 
   function winner() {
+
     const alive =
       S.players.filter(
         p => p.alive
@@ -397,6 +560,7 @@
   }
 
   function showWin(w) {
+
     if (!w) return;
 
     if ($("winnerAvatar"))
@@ -414,10 +578,15 @@
     if ($("winnerLives"))
       $("winnerLives").textContent =
         "❤️".repeat(
-          Math.max(1, w.lives)
+          Math.max(
+            1,
+            w.lives
+          )
         );
 
     S.started = false;
+
+    stopPolling();
 
     show("winner");
   }
@@ -431,22 +600,29 @@
     S.rolling = true;
 
     if ($("roll"))
-      $("roll").disabled = true;
+      $("roll").disabled =
+        true;
 
     if ($("dice"))
-      $("dice").classList.add("rolling");
+      $("dice").classList.add(
+        "rolling"
+      );
 
     setTimeout(() => {
 
       if ($("dice"))
-        $("dice").textContent = value;
+        $("dice").textContent =
+          value;
 
       if ($("dice"))
-        $("dice").classList.remove("rolling");
+        $("dice").classList.remove(
+          "rolling"
+        );
 
       S.rolling = false;
 
-      done();
+      if (typeof done === "function")
+        done();
 
     }, 650);
   }
@@ -460,7 +636,8 @@
     if (
       S.rolling ||
       !S.started
-    ) return;
+    )
+      return;
 
     const cur =
       S.players.find(
@@ -469,60 +646,77 @@
           p.alive
       );
 
-    if (!cur) return;
+    if (!cur)
+      return;
 
     const value =
       Math.floor(
         Math.random() * 6
       ) + 1;
 
-    animate(value, () => {
+    animate(
+      value,
+      () => {
 
-      const target =
-        S.players.find(
-          p =>
-            p.slot === value - 1
-        );
+        const target =
+          S.players.find(
+            p =>
+              p.slot ===
+              value - 1
+          );
 
-      if (target?.alive) {
+        if (
+          target?.alive
+        ) {
 
-        target.lives--;
+          target.lives--;
 
-        if (target.lives < 1)
-          target.alive = false;
+          if (
+            target.lives < 1
+          )
+            target.alive =
+              false;
 
-        if ($("result"))
-          $("result").textContent =
-            `🎲 ${value} → ${target.name} loses 1 life!`;
+          if ($("result"))
+            $("result").textContent =
+              `🎲 ${value} → ${
+                target.name
+              } loses 1 life!`;
 
-        log(
-          `${cur.name} rolled ${value} → ${target.name} -1 ❤️`
-        );
+          log(
+            `${cur.name} rolled ${value} → ${
+              target.name
+            } -1 ❤️`
+          );
 
+        }
+        else {
+
+          if ($("result"))
+            $("result").textContent =
+              `🎲 ${value} → Player ${value} is already eliminated.`;
+
+          log(
+            `${cur.name} rolled ${value} → no damage`
+          );
+        }
+
+        const w =
+          winner();
+
+        if (w)
+          return showWin(w);
+
+        S.turn =
+          nextAlive(
+            S.turn
+          );
+
+        S.round++;
+
+        renderBoard();
       }
-      else {
-
-        if ($("result"))
-          $("result").textContent =
-            `🎲 ${value} → Player ${value} is already eliminated.`;
-
-        log(
-          `${cur.name} rolled ${value} → no damage`
-        );
-      }
-
-      const w = winner();
-
-      if (w)
-        return showWin(w);
-
-      S.turn =
-        nextAlive(S.turn);
-
-      S.round++;
-
-      renderBoard();
-    });
+    );
   }
 
   /* =====================================================
@@ -531,25 +725,53 @@
 
   function setupOffline() {
 
-    S.mode = "offline";
-    S.players = players6();
-    S.started = false;
-    S.turn = 0;
-    S.round = 1;
+    stopPolling();
+
+    S.mode =
+      "offline";
+
+    S.players =
+      players6();
+
+    S.started =
+      false;
+
+    S.turn =
+      0;
+
+    S.round =
+      1;
+
+    S.room =
+      "";
+
+    S.myId =
+      "";
+
+    S.host =
+      false;
 
     badge(false);
 
-    $("setupEyebrow").textContent =
-      "OFFLINE";
+    if ($("setupEyebrow"))
+      $("setupEyebrow").textContent =
+        "OFFLINE";
 
-    $("setupTitle").textContent =
-      "Set up 6 players";
+    if ($("setupTitle"))
+      $("setupTitle").textContent =
+        "Set up 6 players";
 
-    $("offlineSetup")
-      .classList.remove("hidden");
+    if ($("offlineSetup"))
+      $("offlineSetup")
+        .classList.remove(
+          "hidden"
+        );
 
-    $("onlineSetup")
-      .classList.add("hidden");
+    if ($("onlineSetup"))
+      $("onlineSetup")
+        .classList.add(
+          "hidden"
+        );
 
     makeInputs();
 
@@ -558,22 +780,35 @@
 
   function setupOnline() {
 
-    $("safetyModal")
-      .classList.remove("hidden");
+    if ($("safetyModal"))
+      $("safetyModal")
+        .classList.remove(
+          "hidden"
+        );
 
-    $("setupEyebrow").textContent =
-      "ONLINE";
+    if ($("setupEyebrow"))
+      $("setupEyebrow").textContent =
+        "ONLINE";
 
-    $("setupTitle").textContent =
-      "Create or join a room";
+    if ($("setupTitle"))
+      $("setupTitle").textContent =
+        "Create or join a room";
 
-    $("offlineSetup")
-      .classList.add("hidden");
+    if ($("offlineSetup"))
+      $("offlineSetup")
+        .classList.add(
+          "hidden"
+        );
 
-    $("onlineSetup")
-      .classList.remove("hidden");
+    if ($("onlineSetup"))
+      $("onlineSetup")
+        .classList.remove(
+          "hidden"
+        );
 
-    status("Ready to connect.");
+    status(
+      "Enter your details and create or join a room."
+    );
 
     show("setup");
   }
@@ -582,193 +817,280 @@
      SERVER API
      ===================================================== */
 
-  async function api(url, options = {}) {
+  async function api(
+    url,
+    options = {},
+    timeout = 15000
+  ) {
 
-    const response =
-      await fetch(
-        url,
-        {
-          ...options,
-          headers: {
-            "Content-Type":
-              "application/json",
-            ...(options.headers || {})
-          },
-          cache: "no-store"
-        }
+    const controller =
+      new AbortController();
+
+    const timer =
+      setTimeout(
+        () => controller.abort(),
+        timeout
       );
-
-    let data;
 
     try {
-      data =
-        await response.json();
-    }
-    catch {
-      throw new Error(
-        "Server returned an invalid response."
-      );
-    }
 
-    if (!response.ok || data.ok === false) {
-      throw new Error(
-        data.error ||
-        "Server request failed."
-      );
-    }
+      const response =
+        await fetch(
+          url,
+          {
+            ...options,
 
-    return data;
+            signal:
+              controller.signal,
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              "Cache-Control":
+                "no-cache",
+
+              ...(options.headers || {})
+            },
+
+            cache:
+              "no-store"
+          }
+        );
+
+      let data;
+
+      try {
+
+        data =
+          await response.json();
+
+      }
+      catch {
+
+        throw new Error(
+          "Server returned an invalid response."
+        );
+      }
+
+      if (
+        !response.ok ||
+        data.ok === false
+      ) {
+
+        throw new Error(
+          data.error ||
+          "Server request failed."
+        );
+      }
+
+      return data;
+
+    }
+    catch (err) {
+
+      if (
+        err.name ===
+        "AbortError"
+      ) {
+
+        throw new Error(
+          "Server took too long to respond. Please try again."
+        );
+      }
+
+      throw err;
+
+    }
+    finally {
+
+      clearTimeout(timer);
+    }
   }
 
   /* =====================================================
-     CLOSE ONLINE
+     STOP POLLING
      ===================================================== */
 
-  function closeOnline() {
+  function stopPolling() {
 
-    try {
-      S.eventSource?.close();
+    if (S.pollTimer) {
+
+      clearInterval(
+        S.pollTimer
+      );
+
+      S.pollTimer =
+        null;
     }
-    catch {}
 
-    S.eventSource = null;
+    S.polling =
+      false;
   }
 
   /* =====================================================
-     APPLY SERVER STATE
+     APPLY ROOM STATE
      ===================================================== */
 
-  function applyServerRoom(room) {
+  function applyServerRoom(
+    room,
+    forceScreen = false
+  ) {
 
-    if (!room) return;
+    if (!room)
+      return;
 
-    S.room = room.code;
+    const previousStarted =
+      S.started;
+
+    S.room =
+      room.code ||
+      S.room;
+
     S.players =
-      Array.isArray(room.players)
+      Array.isArray(
+        room.players
+      )
         ? room.players
         : [];
 
-    S.started = !!room.started;
+    S.started =
+      !!room.started;
+
     S.turn =
-      Number.isInteger(room.turn)
+      Number.isInteger(
+        room.turn
+      )
         ? room.turn
         : 0;
 
     S.round =
-      Number.isInteger(room.round)
+      Number.isInteger(
+        room.round
+      )
         ? room.round
         : 1;
 
     badge(true);
 
-    renderLobby();
-
-    /*
-      IMPORTANT:
-      Every online player is taken
-      directly to the lobby when
-      the server sends the state.
-    */
-
     if (S.started) {
-      startGameUI();
+
+      if (
+        forceScreen ||
+        S.screen !== "game"
+      ) {
+
+        startGameUI();
+
+      }
+      else {
+
+        renderBoard();
+
+      }
+
     }
     else {
-      show("lobby");
+
+      renderLobby();
+
+      if (
+        forceScreen ||
+        S.screen !== "lobby"
+      ) {
+
+        show("lobby");
+
+      }
+    }
+
+    if (
+      !previousStarted &&
+      S.started
+    ) {
+
+      status(
+        "Game started."
+      );
     }
   }
 
   /* =====================================================
-     REALTIME SERVER EVENTS
+     POLL ROOM STATE
      ===================================================== */
 
-  function connectEvents() {
+  async function pollRoomState() {
 
-    if (!S.room || !S.myId)
+    if (
+      !S.room ||
+      !S.myId ||
+      S.polling
+    )
       return;
 
-    closeOnline();
+    S.polling =
+      true;
 
-    status("Connecting to room…");
+    try {
 
-    const url =
-      `/api/events?code=${encodeURIComponent(
-        S.room
-      )}&playerId=${encodeURIComponent(
-        S.myId
-      )}`;
+      const data =
+        await api(
+          `/api/state?code=${encodeURIComponent(
+            S.room
+          )}`,
+          {
+            method:
+              "GET"
+          },
+          10000
+        );
 
-    const source =
-      new EventSource(url);
+      if (data.room) {
 
-    S.eventSource = source;
+        applyServerRoom(
+          data.room
+        );
 
-    source.addEventListener(
-      "connected",
-      () => {
         status(
-          "Connected. Loading lobby…"
+          S.started
+            ? "Game connected."
+            : "Room connected."
         );
       }
-    );
 
-    source.addEventListener(
-      "state",
-      event => {
+    }
+    catch (err) {
 
-        try {
-
-          const room =
-            JSON.parse(
-              event.data
-            );
-
-          applyServerRoom(room);
-
-        }
-        catch {
-          toast(
-            "Received invalid room data."
-          );
-        }
-      }
-    );
-
-    source.addEventListener(
-      "message",
-      event => {
-
-        try {
-
-          const data =
-            JSON.parse(
-              event.data
-            );
-
-          if (
-            data.message ===
-            "GAME_STARTED"
-          ) {
-            status(
-              "Game started."
-            );
-          }
-
-        }
-        catch {}
-      }
-    );
-
-    source.onerror = () => {
-
-      if (
-        S.eventSource !== source
-      ) return;
-
-      status(
-        "Reconnecting to room…"
+      console.log(
+        "Room polling:",
+        err.message
       );
-    };
+
+    }
+    finally {
+
+      S.polling =
+        false;
+    }
+  }
+
+  function startPolling() {
+
+    stopPolling();
+
+    if (
+      !S.room ||
+      !S.myId
+    )
+      return;
+
+    pollRoomState();
+
+    S.pollTimer =
+      setInterval(
+        pollRoomState,
+        1000
+      );
   }
 
   /* =====================================================
@@ -778,21 +1100,26 @@
   async function createOnlineRoom() {
 
     const name =
-      $("myName").value.trim()
+      $("myName")?.value.trim()
       || "Player 1";
 
     const city =
-      $("myCity").value.trim()
+      $("myCity")?.value.trim()
       || "Unknown City";
 
-    closeOnline();
+    stopPolling();
 
-    S.mode = "online";
-    S.host = true;
+    S.mode =
+      "online";
+
+    S.host =
+      true;
 
     badge(true);
 
-    status("Creating room…");
+    status(
+      "Creating room…"
+    );
 
     try {
 
@@ -800,11 +1127,14 @@
         await api(
           "/api/create",
           {
-            method: "POST",
-            body: JSON.stringify({
-              name,
-              city
-            })
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                name,
+                city
+              })
           }
         );
 
@@ -815,19 +1145,22 @@
         data.playerId;
 
       applyServerRoom(
-        data.room
+        data.room,
+        true
       );
 
-      connectEvents();
+      startPolling();
 
       toast(
-        "Room created. Share the code."
+        `Room ${S.room} created. Share this code.`
       );
 
     }
     catch (err) {
 
-      S.host = false;
+      S.host =
+        false;
+
       badge(false);
 
       status(
@@ -848,20 +1181,27 @@
   async function joinOnlineRoom() {
 
     const code =
-      $("roomInput").value
+      $("roomInput")
+        ?.value
         .trim()
         .toUpperCase();
 
     const name =
-      $("myName").value.trim()
+      $("myName")
+        ?.value
+        .trim()
       || "Player";
 
     const city =
-      $("myCity").value.trim()
+      $("myCity")
+        ?.value
+        .trim()
       || "Unknown City";
 
     if (
-      !/^[A-Z0-9]{6}$/.test(code)
+      !/^[A-Z0-9]{6}$/.test(
+        code || ""
+      )
     ) {
 
       toast(
@@ -871,48 +1211,96 @@
       return;
     }
 
-    closeOnline();
+    stopPolling();
 
-    S.mode = "online";
-    S.host = false;
+    S.mode =
+      "online";
+
+    S.host =
+      false;
 
     badge(true);
 
-    status("Joining room…");
+    status(
+      "Joining room…"
+    );
 
     try {
+
+      /*
+        IMPORTANT:
+        The request waits only 15 seconds.
+        It cannot stay on JOINING forever.
+      */
 
       const data =
         await api(
           "/api/join",
           {
-            method: "POST",
-            body: JSON.stringify({
-              code,
-              name,
-              city
-            })
-          }
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                code,
+                name,
+                city
+              })
+          },
+          15000
         );
 
+      if (
+        !data.room ||
+        !data.playerId
+      ) {
+
+        throw new Error(
+          "Invalid room response from server."
+        );
+      }
+
       S.room =
-        data.roomCode;
+        data.roomCode ||
+        code;
 
       S.myId =
         data.playerId;
 
+      /*
+        IMPORTANT:
+        Show lobby FIRST.
+        Start polling AFTER that.
+      */
+
       applyServerRoom(
-        data.room
+        data.room,
+        true
       );
 
-      connectEvents();
+      startPolling();
+
+      status(
+        "Room connected."
+      );
 
       toast(
-        "Joined room successfully."
+        `Joined room ${S.room}.`
       );
 
     }
     catch (err) {
+
+      stopPolling();
+
+      S.room =
+        "";
+
+      S.myId =
+        "";
+
+      S.host =
+        false;
 
       badge(false);
 
@@ -937,17 +1325,24 @@
       S.mode !== "online" ||
       !S.room ||
       !S.myId
-    ) return;
+    )
+      return;
 
     const me =
       S.players.find(
-        p => p.id === S.myId
+        p =>
+          p.id === S.myId
       );
 
-    if (!me) return;
+    if (!me)
+      return;
 
     const nextReady =
       !me.ready;
+
+    if ($("readyBtn"))
+      $("readyBtn").disabled =
+        true;
 
     try {
 
@@ -961,12 +1356,20 @@
         await api(
           "/api/ready",
           {
-            method: "POST",
-            body: JSON.stringify({
-              code: S.room,
-              playerId: S.myId,
-              ready: nextReady
-            })
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                code:
+                  S.room,
+
+                playerId:
+                  S.myId,
+
+                ready:
+                  nextReady
+              })
           }
         );
 
@@ -987,6 +1390,9 @@
         err.message ||
         "Could not change READY status."
       );
+
+      renderLobby();
+
     }
   }
 
@@ -999,22 +1405,47 @@
     if (!S.host)
       return;
 
+    if (
+      !S.room ||
+      !S.myId
+    )
+      return;
+
+    if ($("startOnline"))
+      $("startOnline").disabled =
+        true;
+
     try {
+
+      status(
+        "Starting game…"
+      );
 
       const data =
         await api(
           "/api/start",
           {
-            method: "POST",
-            body: JSON.stringify({
-              code: S.room,
-              playerId: S.myId
-            })
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                code:
+                  S.room,
+
+                playerId:
+                  S.myId
+              })
           }
         );
 
       applyServerRoom(
-        data.room
+        data.room,
+        true
+      );
+
+      status(
+        "Game started."
       );
 
     }
@@ -1024,6 +1455,9 @@
         err.message ||
         "Could not start game."
       );
+
+      renderLobby();
+
     }
   }
 
@@ -1036,11 +1470,13 @@
     if (
       S.rolling ||
       !S.started
-    ) return;
+    )
+      return;
 
     const me =
       S.players.find(
-        p => p.id === S.myId
+        p =>
+          p.id === S.myId
       );
 
     const current =
@@ -1052,8 +1488,19 @@
 
     if (
       !me ||
-      !current ||
-      current.id !== me.id
+      !current
+    ) {
+
+      toast(
+        "Please wait."
+      );
+
+      return;
+    }
+
+    if (
+      current.id !==
+      me.id
     ) {
 
       toast(
@@ -1063,52 +1510,63 @@
       return;
     }
 
-    /*
-      This endpoint will be added to
-      server.js in the final server step.
-    */
+    if ($("roll"))
+      $("roll").disabled =
+        true;
 
-    const value =
-      Math.floor(
-        Math.random() * 6
-      ) + 1;
-
-    animate(
-      value,
-      () => {}
+    status(
+      "Rolling dice…"
     );
 
     try {
+
+      /*
+        SERVER decides the value.
+        Client does NOT send a dice value.
+      */
 
       const data =
         await api(
           "/api/roll",
           {
-            method: "POST",
-            body: JSON.stringify({
-              code: S.room,
-              playerId: S.myId,
-              value
-            })
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                code:
+                  S.room,
+
+                playerId:
+                  S.myId
+              })
           }
         );
 
-      if (data.room) {
-        applyServerRoom(
+      if (
+        data.roll
+      ) {
+
+        applyOnlineRoll(
+          data.roll,
           data.room
         );
-      }
 
-      if (data.roll) {
-        applyOnlineRoll(
-          data.roll
+      }
+      else if (
+        data.room
+      ) {
+
+        applyServerRoom(
+          data.room
         );
       }
 
     }
     catch (err) {
 
-      S.rolling = false;
+      S.rolling =
+        false;
 
       toast(
         err.message ||
@@ -1123,15 +1581,21 @@
      ONLINE ROLL RESULT
      ===================================================== */
 
-  function applyOnlineRoll(roll) {
+  function applyOnlineRoll(
+    roll,
+    room
+  ) {
 
     const value =
-      Number(roll.value);
+      Number(
+        roll.value
+      );
 
     const target =
       S.players.find(
         p =>
-          p.slot === value - 1
+          p.slot ===
+          value - 1
       );
 
     animate(
@@ -1162,16 +1626,18 @@
           }`
         );
 
-        if (roll.room) {
+        if (room) {
+
           applyServerRoom(
-            roll.room
+            room
           );
         }
 
         if (
           roll.winnerSlot !==
-          null &&
-          roll.winnerSlot !== undefined
+            null &&
+          roll.winnerSlot !==
+            undefined
         ) {
 
           const w =
@@ -1181,9 +1647,39 @@
                 roll.winnerSlot
             );
 
-          if (w)
-            showWin(w);
+          if (w) {
+
+            /*
+              Use server room values
+              before showing winner.
+            */
+
+            if (room) {
+
+              const freshWinner =
+                room.players?.find(
+                  p =>
+                    p.slot ===
+                    roll.winnerSlot
+                );
+
+              showWin(
+                freshWinner ||
+                w
+              );
+
+            }
+            else {
+
+              showWin(w);
+
+            }
+          }
         }
+
+        status(
+          "Room connected."
+        );
 
       }
     );
@@ -1200,7 +1696,8 @@
         S.mode.toUpperCase();
 
     if ($("log"))
-      $("log").innerHTML = "";
+      $("log").innerHTML =
+        "";
 
     if ($("result"))
       $("result").textContent =
@@ -1215,96 +1712,182 @@
      BUTTONS
      ===================================================== */
 
-  if ($("goOffline"))
+  if ($("goOffline")) {
+
     $("goOffline").onclick =
       setupOffline;
+  }
 
-  if ($("goOnline"))
+  if ($("goOnline")) {
+
     $("goOnline").onclick =
       setupOnline;
+  }
 
-  if ($("backHome"))
-    $("backHome").onclick = () => {
-      closeOnline();
-      show("home");
-    };
+  if ($("backHome")) {
 
-  if ($("startOffline"))
-    $("startOffline").onclick = () => {
+    $("backHome").onclick =
+      () => {
 
-      S.offlineNames =
-        Array.from(
-          { length: 6 },
-          (_, i) => ({
-            name:
-              $("pn" + i)
-                .value
-                .trim()
-              || `Player ${i + 1}`,
+        stopPolling();
 
-            city:
-              $("pc" + i)
-                .value
-                .trim()
-              || `City ${i + 1}`
-          })
+        S.room =
+          "";
+
+        S.myId =
+          "";
+
+        S.host =
+          false;
+
+        badge(false);
+
+        show("home");
+      };
+  }
+
+  /* =====================================================
+     OFFLINE START
+     ===================================================== */
+
+  if ($("startOffline")) {
+
+    $("startOffline").onclick =
+      () => {
+
+        S.offlineNames =
+          Array.from(
+            { length: 6 },
+            (_, i) => ({
+
+              name:
+                $(
+                  "pn" + i
+                )
+                  ?.value
+                  .trim()
+                ||
+                `Player ${i + 1}`,
+
+              city:
+                $(
+                  "pc" + i
+                )
+                  ?.value
+                  .trim()
+                ||
+                `City ${i + 1}`
+            })
+          );
+
+        S.players =
+          players6();
+
+        S.players.forEach(
+          (p, i) => {
+
+            p.name =
+              S.offlineNames[
+                i
+              ].name;
+
+            p.city =
+              S.offlineNames[
+                i
+              ].city;
+
+            p.ready =
+              true;
+          }
         );
 
-      S.players =
-        players6();
+        S.mode =
+          "offline";
 
-      S.players.forEach(
-        (p, i) => {
+        S.started =
+          true;
 
-          p.name =
-            S.offlineNames[i].name;
+        S.turn =
+          0;
 
-          p.city =
-            S.offlineNames[i].city;
+        S.round =
+          1;
 
-          p.ready = true;
+        startGameUI();
+      };
+  }
+
+  /* =====================================================
+     ROLL BUTTON
+     ===================================================== */
+
+  if ($("roll")) {
+
+    $("roll").onclick =
+      () => {
+
+        if (
+          S.mode ===
+          "offline"
+        ) {
+
+          offlineRoll();
+
         }
-      );
+        else {
 
-      S.mode = "offline";
-      S.started = true;
-      S.turn = 0;
-      S.round = 1;
+          onlineRoll();
 
-      startGameUI();
-    };
+        }
+      };
+  }
 
-  if ($("roll"))
-    $("roll").onclick = () => {
+  /* =====================================================
+     CREATE ROOM
+     ===================================================== */
 
-      if (
-        S.mode ===
-        "offline"
-      ) {
-        offlineRoll();
-      }
-      else {
-        onlineRoll();
-      }
-    };
+  if ($("createRoom")) {
 
-  if ($("createRoom"))
     $("createRoom").onclick =
       createOnlineRoom;
+  }
 
-  if ($("joinRoom"))
+  /* =====================================================
+     JOIN ROOM
+     ===================================================== */
+
+  if ($("joinRoom")) {
+
     $("joinRoom").onclick =
       joinOnlineRoom;
+  }
 
-  if ($("readyBtn"))
+  /* =====================================================
+     READY
+     ===================================================== */
+
+  if ($("readyBtn")) {
+
     $("readyBtn").onclick =
       toggleReady;
+  }
 
-  if ($("startOnline"))
+  /* =====================================================
+     START ONLINE
+     ===================================================== */
+
+  if ($("startOnline")) {
+
     $("startOnline").onclick =
       startOnlineGame;
+  }
 
-  if ($("copyRoom"))
+  /* =====================================================
+     COPY ROOM
+     ===================================================== */
+
+  if ($("copyRoom")) {
+
     $("copyRoom").onclick =
       async () => {
 
@@ -1326,103 +1909,220 @@
           );
         }
       };
+  }
 
   /* =====================================================
      PLAY AGAIN
      ===================================================== */
 
-  if ($("again"))
-    $("again").onclick = () => {
+  if ($("again")) {
 
-      if (
-        S.mode ===
-        "offline"
-      ) {
+    $("again").onclick =
+      () => {
 
-        S.players.forEach(p => {
-          p.lives = 3;
-          p.alive = true;
-          p.ready = true;
-        });
+        if (
+          S.mode ===
+          "offline"
+        ) {
 
-        S.turn = 0;
-        S.round = 1;
-        S.started = true;
+          S.players.forEach(
+            p => {
 
-        startGameUI();
+              p.lives =
+                3;
 
-      }
-      else if (S.host) {
+              p.alive =
+                true;
 
-        toast(
-          "Host can create/start the next round."
+              p.ready =
+                true;
+            }
+          );
+
+          S.turn =
+            0;
+
+          S.round =
+            1;
+
+          S.started =
+            true;
+
+          startGameUI();
+
+        }
+        else if (
+          S.host
+        ) {
+
+          /*
+            Server restart endpoint exists.
+            Use it instead of asking the
+            host to manually refresh.
+          */
+
+          restartOnlineGame();
+
+        }
+        else {
+
+          toast(
+            "Ask the host to start the next game."
+          );
+        }
+      };
+  }
+
+  /* =====================================================
+     ONLINE RESTART
+     ===================================================== */
+
+  async function restartOnlineGame() {
+
+    if (
+      !S.host ||
+      !S.room ||
+      !S.myId
+    )
+      return;
+
+    try {
+
+      status(
+        "Preparing next game…"
+      );
+
+      const data =
+        await api(
+          "/api/restart",
+          {
+            method:
+              "POST",
+
+            body:
+              JSON.stringify({
+                code:
+                  S.room,
+
+                playerId:
+                  S.myId
+              })
+          }
         );
 
-        show("lobby");
+      applyServerRoom(
+        data.room,
+        true
+      );
 
-      }
-      else {
+      status(
+        "Lobby ready."
+      );
 
-        toast(
-          "Ask the host to start the next game."
-        );
-      }
-    };
+    }
+    catch (err) {
 
-  if ($("menu"))
-    $("menu").onclick = () => {
-      closeOnline();
-      location.reload();
-    };
+      toast(
+        err.message ||
+        "Could not restart game."
+      );
+    }
+  }
+
+  /* =====================================================
+     MENU
+     ===================================================== */
+
+  if ($("menu")) {
+
+    $("menu").onclick =
+      () => {
+
+        stopPolling();
+
+        location.reload();
+      };
+  }
 
   /* =====================================================
      SAFETY
      ===================================================== */
 
   makeInputs();
+
   badge(false);
 
-  if ($("safetyOk"))
-    $("safetyOk").onclick = () => {
-      $("safetyModal")
-        .classList.add("hidden");
-    };
+  if ($("safetyOk")) {
+
+    $("safetyOk").onclick =
+      () => {
+
+        if ($("safetyModal"))
+          $("safetyModal")
+            .classList.add(
+              "hidden"
+            );
+      };
+  }
 
   /* =====================================================
      PWA INSTALL
      ===================================================== */
 
-  let deferred;
+  let deferredPrompt =
+    null;
 
   window.addEventListener(
     "beforeinstallprompt",
-    e => {
+    event => {
 
-      e.preventDefault();
+      event.preventDefault();
 
-      deferred = e;
+      deferredPrompt =
+        event;
 
       if ($("installBtn"))
         $("installBtn")
-          .classList.remove("hidden");
+          .classList.remove(
+            "hidden"
+          );
     }
   );
 
-  if ($("installBtn"))
+  if ($("installBtn")) {
+
     $("installBtn").onclick =
       async () => {
 
-        if (!deferred)
+        if (!deferredPrompt)
           return;
 
-        deferred.prompt();
+        deferredPrompt.prompt();
 
-        await deferred.userChoice;
+        try {
+          await deferredPrompt.userChoice;
+        }
+        catch {}
 
-        deferred = null;
+        deferredPrompt =
+          null;
 
         $("installBtn")
-          .classList.add("hidden");
+          .classList.add(
+            "hidden"
+          );
       };
+  }
+
+  /* =====================================================
+     PAGE CLEANUP
+     ===================================================== */
+
+  window.addEventListener(
+    "beforeunload",
+    () => {
+      stopPolling();
+    }
+  );
 
 })();
