@@ -125,7 +125,7 @@ function handleNet(m,c){
  }
  if(m.type==="state"){
    S.mode="online";S.players=m.players;S.turn=m.turn;S.round=m.round;S.started=m.phase==="game";badge(true);
-   renderLobby();if(S.started)startGameUI();return;
+   renderLobby();show("lobby");if(S.started)startGameUI();return;
  }
  if(m.type==="roll"){applyRoll(m);return}
  if(m.type==="error"){toast(m.message);status(m.message)}
