@@ -1,1261 +1,1428 @@
 (() => {
-const $=id=>document.getElementById(id);
-const screens=["home","setup","lobby","game","winner"];
-const S={mode:"offline",players:[],turn:0,round:1,started:false,room:"",host:false,myId:"",peer:null,hostConn:null,conns:new Map(),ready:false,rolling:false,peerReady:false,offlineNames:[]};
-const colors=["#1da8ff","#ff5361","#42df8d","#ffc52c","#a66bff","#aeb8c5"];
+  const $ = id => document.getElementById(id);
 
-const show=id=>{
-  screens.forEach(s=>$(s).classList.toggle("active",s===id));
-  scrollTo(0,0);
-};
+  const screens = ["home", "setup", "lobby", "game", "winner"];
 
-function toast(t){
-  const e=$("toast");
-  e.textContent=t;
-  e.classList.add("show");
-  clearTimeout(window.tt);
-  window.tt=setTimeout(()=>e.classList.remove("show"),2800);
-}
+  const S = {
+    mode: "offline",
+    players: [],
+    turn: 0,
+    round: 1,
+    started: false,
 
-function status(t){$("onlineStatus").textContent=t}
+    room: "",
+    host: false,
+    myId: "",
 
-function badge(on){
-  $("netBadge").textContent=on?"ONLINE":"OFFLINE";
-  $("netBadge").className="badge "+(on?"online":"offline");
-}
+    eventSource: null,
 
-function esc(s){
-  return String(s||"").replace(/[&<>"']/g,x=>({
-    "&":"&amp;",
-    "<":"&lt;",
-    ">":"&gt;",
-    '"':"&quot;",
-    "'":"&#39;"
-  }[x]));
-}
+    ready: false,
+    rolling: false,
 
-function players6(){
-  return Array.from({length:6},(_,i)=>({
-    id:"p"+(i+1),
-    slot:i,
-    name:"Player "+(i+1),
-    city:"City "+(i+1),
-    lives:3,
-    alive:true,
-    ready:false,
-    isHost:i===0
-  }));
-}
+    offlineNames: []
+  };
 
-function makeInputs(){
-  $("playerInputs").innerHTML=Array.from({length:6},(_,i)=>`
-    <div class="pinput">
-      <div class="num" style="border:1px solid ${colors[i]}">${i+1}</div>
-      <label>PLAYER ${i+1}
-        <input id="pn${i}" maxlength="18"
-        value="${esc(S.offlineNames[i]?.name||`Player ${i+1}`)}">
-      </label>
-      <label>CITY
-        <input id="pc${i}" maxlength="24"
-        value="${esc(S.offlineNames[i]?.city||`City ${i+1}`)}">
-      </label>
-    </div>
-  `).join("");
-}
+  const colors = [
+    "#1da8ff",
+    "#ff5361",
+    "#42df8d",
+    "#ffc52c",
+    "#a66bff",
+    "#aeb8c5"
+  ];
 
-function renderLobby(){
-  const ps=S.players;
-  const ready=ps.filter(p=>p.ready).length;
+  /* =====================================================
+     BASIC UI
+     ===================================================== */
 
-  $("roomCode").textContent=S.room;
-  $("count").textContent=`${ps.length}/6 PLAYERS`;
-  $("readyCount").textContent=`${ready}/6 READY`;
+  const show = id => {
+    screens.forEach(s => {
+      const el = $(s);
+      if (el) el.classList.toggle("active", s === id);
+    });
 
-  $("lobbyText").textContent=
-    ps.length<6
-    ?`Waiting for ${6-ps.length} more player${6-ps.length===1?"":"s"}...`
-    :ready<6
-    ?`All players joined. Waiting for ${6-ready} READY.`
-    :"All players READY. Host can start.";
+    scrollTo(0, 0);
+  };
 
-  $("hostText").textContent=
-    S.host?"★ You are the HOST.":"Waiting for the HOST.";
+  function toast(t) {
+    const e = $("toast");
+    if (!e) return;
 
-  $("lobbyGrid").innerHTML=
-    Array.from({length:6},(_,i)=>{
-      const p=ps.find(x=>x.slot===i);
+    e.textContent = t;
+    e.classList.add("show");
 
-      return p
-      ?`
-        <div class="slot">
-          <span>PLAYER ${i+1}</span>
-          <span class="status ${p.ready?"ready":"waiting"}">
-            ${p.ready?"READY":"WAITING"}
-          </span>
-          <h3>${esc(p.name)}</h3>
-          <p>📍 ${esc(p.city)}</p>
-          ${p.isHost?'<div class="host">★ HOST</div>':""}
-        </div>
-      `
-      :`
-        <div class="slot empty">
-          PLAYER ${i+1}<br>WAITING...
-        </div>
-      `;
-    }).join("");
+    clearTimeout(window.diceToastTimer);
 
-  const me=ps.find(p=>p.id===S.myId);
-
-  $("readyBtn").textContent=me?.ready?"NOT READY":"READY ✓";
-
-  $("startOnline").disabled=
-    !(S.host&&ps.length===6&&ready===6);
-}
-
-function renderBoard(){
-  $("board").innerHTML=
-    S.players
-    .slice()
-    .sort((a,b)=>a.slot-b.slot)
-    .map(p=>`
-      <div class="player ${p.alive?"":"dead"} ${p.slot===S.turn&&p.alive?"current":""}">
-        <div class="ptop">
-          <div class="avatar" style="border-color:${colors[p.slot]}">
-            P${p.slot+1}
-          </div>
-          <div>
-            <h3>${esc(p.name)}</h3>
-            <div class="city">📍 ${esc(p.city)}</div>
-          </div>
-        </div>
-
-        <div class="hearts">
-          ${[0,1,2].map(i=>
-            `<span class="${i<p.lives?"":"empty"}">❤️</span>`
-          ).join("")}
-        </div>
-
-        ${
-          p.slot===S.turn&&p.alive
-          ?'<div class="currentlabel">CURRENT</div>'
-          :""
-        }
-
-        ${
-          !p.alive
-          ?'<div class="deadlabel">ELIMINATED</div>'
-          :""
-        }
-      </div>
-    `).join("");
-
-  $("round").textContent=`ROUND ${Math.max(1,S.round)}`;
-
-  const cur=S.players.find(p=>p.slot===S.turn&&p.alive);
-
-  $("turn").textContent=
-    cur?`${cur.name.toUpperCase()}'S TURN`:"GAME OVER";
-
-  $("hint").textContent=cur?"Roll the dice":"";
-
-  const mine=S.mode==="offline"||cur?.id===S.myId;
-
-  $("roll").disabled=
-    !S.started||S.rolling||!cur||!mine;
-
-  $("roll").textContent=
-    mine?"ROLL THE DICE":"WAIT FOR YOUR TURN";
-}
-
-function log(t){
-  const e=document.createElement("div");
-  e.className="logitem";
-  e.textContent=t;
-  $("log").prepend(e);
-}
-
-function nextAlive(from){
-  for(let n=1;n<=6;n++){
-    const slot=(from+n)%6;
-    const p=S.players.find(x=>x.slot===slot);
-    if(p?.alive)return slot;
+    window.diceToastTimer = setTimeout(() => {
+      e.classList.remove("show");
+    }, 2800);
   }
-  return from;
-}
 
-function winner(){
-  const a=S.players.filter(p=>p.alive);
-  return a.length===1?a[0]:null;
-}
+  function status(t) {
+    if ($("onlineStatus")) {
+      $("onlineStatus").textContent = t;
+    }
+  }
 
-function showWin(w){
-  $("winnerAvatar").textContent="P"+(w.slot+1);
-  $("winnerName").textContent=w.name;
-  $("winnerCity").textContent="📍 "+w.city;
-  $("winnerLives").textContent="❤️".repeat(Math.max(1,w.lives));
-  S.started=false;
-  show("winner");
-}
+  function badge(on) {
+    if (!$("netBadge")) return;
 
-function animate(value,done){
-  S.rolling=true;
-  $("roll").disabled=true;
-  $("dice").classList.add("rolling");
+    $("netBadge").textContent = on ? "ONLINE" : "OFFLINE";
 
-  setTimeout(()=>{
-    $("dice").textContent=value;
-    $("dice").classList.remove("rolling");
-    S.rolling=false;
-    done();
-  },650);
-}
+    $("netBadge").className =
+      "badge " + (on ? "online" : "offline");
+  }
 
-function offlineRoll(){
-  if(S.rolling||!S.started)return;
+  function esc(s) {
+    return String(s || "").replace(
+      /[&<>"']/g,
+      x => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[x])
+    );
+  }
 
-  const cur=S.players.find(
-    p=>p.slot===S.turn&&p.alive
-  );
+  /* =====================================================
+     PLAYERS
+     ===================================================== */
 
-  if(!cur)return;
+  function players6() {
+    return Array.from({ length: 6 }, (_, i) => ({
+      id: "p" + (i + 1),
+      slot: i,
+      name: "Player " + (i + 1),
+      city: "City " + (i + 1),
+      lives: 3,
+      alive: true,
+      ready: false,
+      isHost: i === 0
+    }));
+  }
 
-  const v=Math.floor(Math.random()*6)+1;
+  function makeInputs() {
+    const box = $("playerInputs");
+    if (!box) return;
 
-  animate(v,()=>{
-    const t=S.players.find(p=>p.slot===v-1);
+    box.innerHTML =
+      Array.from({ length: 6 }, (_, i) => `
+        <div class="pinput">
+          <div class="num"
+               style="border:1px solid ${colors[i]}">
+            ${i + 1}
+          </div>
 
-    if(t?.alive){
-      t.lives--;
+          <label>
+            PLAYER ${i + 1}
+            <input
+              id="pn${i}"
+              maxlength="18"
+              value="${esc(
+                S.offlineNames[i]?.name ||
+                `Player ${i + 1}`
+              )}">
+          </label>
 
-      if(t.lives<1)t.alive=false;
+          <label>
+            CITY
+            <input
+              id="pc${i}"
+              maxlength="24"
+              value="${esc(
+                S.offlineNames[i]?.city ||
+                `City ${i + 1}`
+              )}">
+          </label>
+        </div>
+      `).join("");
+  }
 
-      $("result").textContent=
-        `🎲 ${v} → ${t.name} loses 1 life!`;
+  /* =====================================================
+     LOBBY
+     ===================================================== */
 
-      log(
-        `${cur.name} rolled ${v} → ${t.name} -1 ❤️`
+  function renderLobby() {
+    const ps = S.players || [];
+
+    const readyCount =
+      ps.filter(p => p.ready).length;
+
+    if ($("roomCode"))
+      $("roomCode").textContent = S.room;
+
+    if ($("count"))
+      $("count").textContent =
+        `${ps.length}/6 PLAYERS`;
+
+    if ($("readyCount"))
+      $("readyCount").textContent =
+        `${readyCount}/6 READY`;
+
+    if ($("lobbyText")) {
+      if (ps.length < 6) {
+        const left = 6 - ps.length;
+
+        $("lobbyText").textContent =
+          `Waiting for ${left} more player${left === 1 ? "" : "s"}...`;
+      }
+      else if (readyCount < 6) {
+        $("lobbyText").textContent =
+          `All players joined. Waiting for ${6 - readyCount} READY.`;
+      }
+      else {
+        $("lobbyText").textContent =
+          "All players READY. Host can start.";
+      }
+    }
+
+    if ($("hostText")) {
+      $("hostText").textContent =
+        S.host
+          ? "★ You are the HOST."
+          : "Waiting for the HOST.";
+    }
+
+    if ($("lobbyGrid")) {
+      $("lobbyGrid").innerHTML =
+        Array.from({ length: 6 }, (_, i) => {
+
+          const p =
+            ps.find(x => x.slot === i);
+
+          if (!p) {
+            return `
+              <div class="slot empty">
+                PLAYER ${i + 1}<br>
+                WAITING...
+              </div>
+            `;
+          }
+
+          return `
+            <div class="slot">
+
+              <span>PLAYER ${i + 1}</span>
+
+              <span class="status ${
+                p.ready ? "ready" : "waiting"
+              }">
+                ${p.ready ? "READY" : "WAITING"}
+              </span>
+
+              <h3>${esc(p.name)}</h3>
+
+              <p>📍 ${esc(p.city)}</p>
+
+              ${
+                p.isHost
+                  ? '<div class="host">★ HOST</div>'
+                  : ""
+              }
+
+            </div>
+          `;
+        }).join("");
+    }
+
+    const me =
+      ps.find(p => p.id === S.myId);
+
+    if ($("readyBtn")) {
+      $("readyBtn").textContent =
+        me?.ready
+          ? "NOT READY"
+          : "READY ✓";
+
+      $("readyBtn").disabled =
+        !me;
+    }
+
+    if ($("startOnline")) {
+      $("startOnline").disabled =
+        !(
+          S.host &&
+          ps.length === 6 &&
+          readyCount === 6
+        );
+    }
+  }
+
+  /* =====================================================
+     BOARD
+     ===================================================== */
+
+  function renderBoard() {
+    if (!$("board")) return;
+
+    $("board").innerHTML =
+      S.players
+        .slice()
+        .sort((a, b) => a.slot - b.slot)
+        .map(p => `
+          <div class="
+            player
+            ${p.alive ? "" : "dead"}
+            ${
+              p.slot === S.turn && p.alive
+                ? "current"
+                : ""
+            }
+          ">
+
+            <div class="ptop">
+
+              <div
+                class="avatar"
+                style="border-color:${colors[p.slot]}"
+              >
+                P${p.slot + 1}
+              </div>
+
+              <div>
+                <h3>${esc(p.name)}</h3>
+
+                <div class="city">
+                  📍 ${esc(p.city)}
+                </div>
+              </div>
+
+            </div>
+
+            <div class="hearts">
+              ${[0, 1, 2].map(i => `
+                <span class="${
+                  i < p.lives ? "" : "empty"
+                }">
+                  ❤️
+                </span>
+              `).join("")}
+            </div>
+
+            ${
+              p.slot === S.turn && p.alive
+                ? '<div class="currentlabel">CURRENT</div>'
+                : ""
+            }
+
+            ${
+              !p.alive
+                ? '<div class="deadlabel">ELIMINATED</div>'
+                : ""
+            }
+
+          </div>
+        `).join("");
+
+    if ($("round"))
+      $("round").textContent =
+        `ROUND ${Math.max(1, S.round)}`;
+
+    const cur =
+      S.players.find(
+        p =>
+          p.slot === S.turn &&
+          p.alive
       );
-    }else{
-      $("result").textContent=
-        `🎲 ${v} → Player ${v} is already eliminated.`;
 
-      log(
-        `${cur.name} rolled ${v} → no damage`
+    if ($("turn"))
+      $("turn").textContent =
+        cur
+          ? `${cur.name.toUpperCase()}'S TURN`
+          : "GAME OVER";
+
+    if ($("hint"))
+      $("hint").textContent =
+        cur ? "Roll the dice" : "";
+
+    const mine =
+      S.mode === "offline" ||
+      cur?.id === S.myId;
+
+    if ($("roll")) {
+      $("roll").disabled =
+        !S.started ||
+        S.rolling ||
+        !cur ||
+        !mine;
+
+      $("roll").textContent =
+        mine
+          ? "ROLL THE DICE"
+          : "WAIT FOR YOUR TURN";
+    }
+  }
+
+  function log(t) {
+    if (!$("log")) return;
+
+    const e =
+      document.createElement("div");
+
+    e.className = "logitem";
+    e.textContent = t;
+
+    $("log").prepend(e);
+  }
+
+  function nextAlive(from) {
+    for (let n = 1; n <= 6; n++) {
+
+      const slot =
+        (from + n) % 6;
+
+      const p =
+        S.players.find(
+          x => x.slot === slot
+        );
+
+      if (p?.alive)
+        return slot;
+    }
+
+    return from;
+  }
+
+  function winner() {
+    const alive =
+      S.players.filter(
+        p => p.alive
+      );
+
+    return alive.length === 1
+      ? alive[0]
+      : null;
+  }
+
+  function showWin(w) {
+    if (!w) return;
+
+    if ($("winnerAvatar"))
+      $("winnerAvatar").textContent =
+        "P" + (w.slot + 1);
+
+    if ($("winnerName"))
+      $("winnerName").textContent =
+        w.name;
+
+    if ($("winnerCity"))
+      $("winnerCity").textContent =
+        "📍 " + w.city;
+
+    if ($("winnerLives"))
+      $("winnerLives").textContent =
+        "❤️".repeat(
+          Math.max(1, w.lives)
+        );
+
+    S.started = false;
+
+    show("winner");
+  }
+
+  /* =====================================================
+     DICE ANIMATION
+     ===================================================== */
+
+  function animate(value, done) {
+
+    S.rolling = true;
+
+    if ($("roll"))
+      $("roll").disabled = true;
+
+    if ($("dice"))
+      $("dice").classList.add("rolling");
+
+    setTimeout(() => {
+
+      if ($("dice"))
+        $("dice").textContent = value;
+
+      if ($("dice"))
+        $("dice").classList.remove("rolling");
+
+      S.rolling = false;
+
+      done();
+
+    }, 650);
+  }
+
+  /* =====================================================
+     OFFLINE GAME
+     ===================================================== */
+
+  function offlineRoll() {
+
+    if (
+      S.rolling ||
+      !S.started
+    ) return;
+
+    const cur =
+      S.players.find(
+        p =>
+          p.slot === S.turn &&
+          p.alive
+      );
+
+    if (!cur) return;
+
+    const value =
+      Math.floor(
+        Math.random() * 6
+      ) + 1;
+
+    animate(value, () => {
+
+      const target =
+        S.players.find(
+          p =>
+            p.slot === value - 1
+        );
+
+      if (target?.alive) {
+
+        target.lives--;
+
+        if (target.lives < 1)
+          target.alive = false;
+
+        if ($("result"))
+          $("result").textContent =
+            `🎲 ${value} → ${target.name} loses 1 life!`;
+
+        log(
+          `${cur.name} rolled ${value} → ${target.name} -1 ❤️`
+        );
+
+      }
+      else {
+
+        if ($("result"))
+          $("result").textContent =
+            `🎲 ${value} → Player ${value} is already eliminated.`;
+
+        log(
+          `${cur.name} rolled ${value} → no damage`
+        );
+      }
+
+      const w = winner();
+
+      if (w)
+        return showWin(w);
+
+      S.turn =
+        nextAlive(S.turn);
+
+      S.round++;
+
+      renderBoard();
+    });
+  }
+
+  /* =====================================================
+     SETUP
+     ===================================================== */
+
+  function setupOffline() {
+
+    S.mode = "offline";
+    S.players = players6();
+    S.started = false;
+    S.turn = 0;
+    S.round = 1;
+
+    badge(false);
+
+    $("setupEyebrow").textContent =
+      "OFFLINE";
+
+    $("setupTitle").textContent =
+      "Set up 6 players";
+
+    $("offlineSetup")
+      .classList.remove("hidden");
+
+    $("onlineSetup")
+      .classList.add("hidden");
+
+    makeInputs();
+
+    show("setup");
+  }
+
+  function setupOnline() {
+
+    $("safetyModal")
+      .classList.remove("hidden");
+
+    $("setupEyebrow").textContent =
+      "ONLINE";
+
+    $("setupTitle").textContent =
+      "Create or join a room";
+
+    $("offlineSetup")
+      .classList.add("hidden");
+
+    $("onlineSetup")
+      .classList.remove("hidden");
+
+    status("Ready to connect.");
+
+    show("setup");
+  }
+
+  /* =====================================================
+     SERVER API
+     ===================================================== */
+
+  async function api(url, options = {}) {
+
+    const response =
+      await fetch(
+        url,
+        {
+          ...options,
+          headers: {
+            "Content-Type":
+              "application/json",
+            ...(options.headers || {})
+          },
+          cache: "no-store"
+        }
+      );
+
+    let data;
+
+    try {
+      data =
+        await response.json();
+    }
+    catch {
+      throw new Error(
+        "Server returned an invalid response."
       );
     }
 
-    const w=winner();
-
-    if(w)return showWin(w);
-
-    S.turn=nextAlive(S.turn);
-    S.round++;
-
-    renderBoard();
-  });
-}
-
-function setupOffline(){
-  S.mode="offline";
-  S.players=players6();
-  S.started=false;
-  S.turn=0;
-  S.round=1;
-
-  badge(false);
-
-  $("setupEyebrow").textContent="OFFLINE";
-  $("setupTitle").textContent="Set up 6 players";
-
-  $("offlineSetup").classList.remove("hidden");
-  $("onlineSetup").classList.add("hidden");
-
-  makeInputs();
-  show("setup");
-}
-
-function setupOnline(){
-  $("safetyModal").classList.remove("hidden");
-
-  $("setupEyebrow").textContent="ONLINE";
-  $("setupTitle").textContent="Create or join a room";
-
-  $("offlineSetup").classList.add("hidden");
-  $("onlineSetup").classList.remove("hidden");
-
-  status("Ready to connect.");
-  show("setup");
-}
-
-function cleanPeer(){
-  try{
-    S.peer?.destroy();
-  }catch{}
-
-  try{
-    S.hostConn?.close();
-  }catch{}
-
-  S.peer=null;
-  S.hostConn=null;
-  S.conns.clear();
-  S.peerReady=false;
-}
-
-function makeRoomCode(){
-  return Math.random()
-    .toString(36)
-    .slice(2,8)
-    .toUpperCase();
-}
-
-const PEER_CONFIG={
-  debug:0,
-  secure:true,
-  config:{
-    iceServers:[
-      {urls:"stun:stun.l.google.com:19302"},
-      {urls:"stun:global.stun.twilio.com:3478"},
-      {urls:"stun.cloudflare.com:3478"}
-    ]
-  }
-};
-
-function initPeerForHost(code,name,city){
-
-  cleanPeer();
-
-  status("Creating room…");
-
-  S.host=true;
-  S.room=code.toUpperCase();
-  S.started=false;
-
-  S.peer=new Peer(
-    S.room.toLowerCase(),
-    PEER_CONFIG
-  );
-
-  let opened=false;
-
-  const openTimer=setTimeout(()=>{
-    if(!opened){
-      status("Unable to connect to online service.");
-      toast("Online service connection timed out.");
-
-      try{
-        S.peer?.destroy();
-      }catch{}
+    if (!response.ok || data.ok === false) {
+      throw new Error(
+        data.error ||
+        "Server request failed."
+      );
     }
-  },15000);
 
-  S.peer.on("open",id=>{
+    return data;
+  }
 
-    opened=true;
-    clearTimeout(openTimer);
+  /* =====================================================
+     CLOSE ONLINE
+     ===================================================== */
 
-    S.myId=id;
-    S.peerReady=true;
-    S.mode="online";
+  function closeOnline() {
 
-    S.players=[{
-      id,
-      peer:null,
-      slot:0,
-      name:String(name).slice(0,18)||"Player 1",
-      city:String(city).slice(0,24)||"Unknown City",
-      lives:3,
-      alive:true,
-      ready:false,
-      isHost:true,
-      connected:true
-    }];
+    try {
+      S.eventSource?.close();
+    }
+    catch {}
+
+    S.eventSource = null;
+  }
+
+  /* =====================================================
+     APPLY SERVER STATE
+     ===================================================== */
+
+  function applyServerRoom(room) {
+
+    if (!room) return;
+
+    S.room = room.code;
+    S.players =
+      Array.isArray(room.players)
+        ? room.players
+        : [];
+
+    S.started = !!room.started;
+    S.turn =
+      Number.isInteger(room.turn)
+        ? room.turn
+        : 0;
+
+    S.round =
+      Number.isInteger(room.round)
+        ? room.round
+        : 1;
 
     badge(true);
 
-    status(
-      "Room created. Share the code with 5 players."
+    renderLobby();
+
+    /*
+      IMPORTANT:
+      Every online player is taken
+      directly to the lobby when
+      the server sends the state.
+    */
+
+    if (S.started) {
+      startGameUI();
+    }
+    else {
+      show("lobby");
+    }
+  }
+
+  /* =====================================================
+     REALTIME SERVER EVENTS
+     ===================================================== */
+
+  function connectEvents() {
+
+    if (!S.room || !S.myId)
+      return;
+
+    closeOnline();
+
+    status("Connecting to room…");
+
+    const url =
+      `/api/events?code=${encodeURIComponent(
+        S.room
+      )}&playerId=${encodeURIComponent(
+        S.myId
+      )}`;
+
+    const source =
+      new EventSource(url);
+
+    S.eventSource = source;
+
+    source.addEventListener(
+      "connected",
+      () => {
+        status(
+          "Connected. Loading lobby…"
+        );
+      }
     );
 
-    renderLobby();
-    show("lobby");
-  });
+    source.addEventListener(
+      "state",
+      event => {
 
-  S.peer.on("connection",c=>{
-    setupIncoming(c);
-  });
+        try {
 
-  S.peer.on("error",e=>{
+          const room =
+            JSON.parse(
+              event.data
+            );
 
-    const t=e?.type||"unknown";
+          applyServerRoom(room);
 
-    if(t==="unavailable-id"){
-      toast(
-        "Room code already in use. Create a new room."
-      );
+        }
+        catch {
+          toast(
+            "Received invalid room data."
+          );
+        }
+      }
+    );
 
-      status(
-        "Room code already in use. Please create a new room."
-      );
-    }else{
-      toast("Online connection error: "+t);
-      status("Online connection error: "+t);
-    }
-  });
+    source.addEventListener(
+      "message",
+      event => {
 
-  S.peer.on("disconnected",()=>{
+        try {
 
-    if(S.started){
-      showConnection(
-        "Connection interrupted. Reconnecting…"
-      );
-    }
+          const data =
+            JSON.parse(
+              event.data
+            );
 
-    try{
-      if(!S.peer.destroyed)
-        S.peer.reconnect();
-    }catch{}
-  });
-}
+          if (
+            data.message ===
+            "GAME_STARTED"
+          ) {
+            status(
+              "Game started."
+            );
+          }
 
-function initPeerForJoin(code,name,city){
+        }
+        catch {}
+      }
+    );
 
-  cleanPeer();
+    source.onerror = () => {
 
-  status("Connecting…");
-
-  S.host=false;
-  S.room=code.toUpperCase();
-  S.mode="online";
-
-  S.peer=new Peer(
-    undefined,
-    PEER_CONFIG
-  );
-
-  let connected=false;
-
-  const failTimer=setTimeout(()=>{
-
-    if(!connected){
+      if (
+        S.eventSource !== source
+      ) return;
 
       status(
-        "Room connection timed out. Check the room code."
+        "Reconnecting to room…"
+      );
+    };
+  }
+
+  /* =====================================================
+     CREATE ROOM
+     ===================================================== */
+
+  async function createOnlineRoom() {
+
+    const name =
+      $("myName").value.trim()
+      || "Player 1";
+
+    const city =
+      $("myCity").value.trim()
+      || "Unknown City";
+
+    closeOnline();
+
+    S.mode = "online";
+    S.host = true;
+
+    badge(true);
+
+    status("Creating room…");
+
+    try {
+
+      const data =
+        await api(
+          "/api/create",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              name,
+              city
+            })
+          }
+        );
+
+      S.room =
+        data.roomCode;
+
+      S.myId =
+        data.playerId;
+
+      applyServerRoom(
+        data.room
+      );
+
+      connectEvents();
+
+      toast(
+        "Room created. Share the code."
+      );
+
+    }
+    catch (err) {
+
+      S.host = false;
+      badge(false);
+
+      status(
+        "Could not create room."
       );
 
       toast(
-        "Could not connect to the host."
+        err.message ||
+        "Could not create room."
+      );
+    }
+  }
+
+  /* =====================================================
+     JOIN ROOM
+     ===================================================== */
+
+  async function joinOnlineRoom() {
+
+    const code =
+      $("roomInput").value
+        .trim()
+        .toUpperCase();
+
+    const name =
+      $("myName").value.trim()
+      || "Player";
+
+    const city =
+      $("myCity").value.trim()
+      || "Unknown City";
+
+    if (
+      !/^[A-Z0-9]{6}$/.test(code)
+    ) {
+
+      toast(
+        "Enter the 6-character room code."
       );
 
-      try{
-        S.peer?.destroy();
-      }catch{}
+      return;
     }
 
-  },15000);
+    closeOnline();
 
-  S.peer.on("open",id=>{
+    S.mode = "online";
+    S.host = false;
 
-    S.myId=id;
-    S.peerReady=true;
+    badge(true);
 
     status("Joining room…");
 
-    const c=S.peer.connect(
-      S.room.toLowerCase(),
-      {
-        reliable:true,
-        serialization:"json",
-        metadata:{
-          name,
-          city
-        }
-      }
-    );
+    try {
 
-    S.hostConn=c;
-
-    const connTimer=setTimeout(()=>{
-
-      if(!connected){
-
-        status(
-          "Host not reachable. Please check the room code."
+      const data =
+        await api(
+          "/api/join",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              code,
+              name,
+              city
+            })
+          }
         );
 
-        toast(
-          "Could not reach the host."
-        );
+      S.room =
+        data.roomCode;
 
-        try{
-          c.close();
-        }catch{}
-      }
+      S.myId =
+        data.playerId;
 
-    },12000);
-
-    c.on("open",()=>{
-
-      connected=true;
-
-      clearTimeout(connTimer);
-      clearTimeout(failTimer);
-
-      status("Connected. Loading lobby…");
-
-      c.send({
-        type:"join",
-        id:S.myId,
-        name:String(name).slice(0,18)||"Player",
-        city:String(city).slice(0,24)||"Unknown City"
-      });
-
-    });
-
-    c.on("data",m=>{
-      handleNet(m,c);
-    });
-
-    c.on("close",()=>{
-
-      if(!S.started){
-
-        status("Connection to host was closed.");
-
-        toast(
-          "Host connection closed. Please join again."
-        );
-
-      }else{
-
-        showConnection(
-          "Host disconnected."
-        );
-      }
-
-    });
-
-    c.on("error",()=>{
-
-      clearTimeout(connTimer);
-
-      status(
-        "Connection error. Please try again."
+      applyServerRoom(
+        data.room
       );
 
-      toast("Connection error.");
-    });
-
-  });
-
-  S.peer.on("error",e=>{
-
-    clearTimeout(failTimer);
-
-    const t=e?.type||"unknown";
-
-    status(
-      t==="peer-unavailable"
-      ?"Room not found. Check the code."
-      :"Could not connect: "+t
-    );
-
-    toast(
-      t==="peer-unavailable"
-      ?"Room not found. Check the code."
-      :"Could not connect: "+t
-    );
-  });
-
-  S.peer.on("disconnected",()=>{
-
-    if(!S.started){
-
-      try{
-        if(!S.peer.destroyed)
-          S.peer.reconnect();
-      }catch{}
-    }
-  });
-}
-
-function setupIncoming(c){
-
-  S.conns.set(c.peer,c);
-
-  c.on("open",()=>{
-
-    if(S.host){
-
-      c.send({
-        type:"hello",
-        room:S.room
-      });
-
-    }
-
-  });
-
-  c.on("data",m=>{
-    handleNet(m,c);
-  });
-
-  c.on("close",()=>{
-
-    if(S.host){
-
-      const p=S.players.find(
-        x=>x.peer===c.peer
-      );
-
-      if(p&&!S.started){
-
-        S.players=S.players.filter(
-          x=>x.peer!==c.peer
-        );
-
-        renderLobby();
-        broadcastState();
-      }
-
-    }
-
-  });
-
-  c.on("error",()=>{});
-}
-
-function broadcastState(){
-
-  if(!S.host)return;
-
-  const data={
-    type:"state",
-    room:S.room,
-
-    players:S.players.map(p=>({
-      id:p.id,
-      slot:p.slot,
-      name:p.name,
-      city:p.city,
-      lives:p.lives,
-      alive:p.alive,
-      ready:p.ready,
-      isHost:p.isHost
-    })),
-
-    turn:S.turn,
-    round:S.round,
-    phase:S.started?"game":"lobby"
-  };
-
-  S.conns.forEach(c=>{
-
-    try{
-
-      if(c.open)
-        c.send(data);
-
-    }catch{}
-  });
-}
-
-function handleNet(m,c){
-
-  if(m.type==="join"&&S.host){
-
-    if(S.players.length>=6){
-
-      c.send({
-        type:"error",
-        message:"Room is full. Maximum 6 players."
-      });
-
-      return;
-    }
-
-    if(S.started){
-
-      c.send({
-        type:"error",
-        message:"Game already started."
-      });
-
-      return;
-    }
-
-    if(S.players.some(p=>p.id===m.id))
-      return;
-
-    const slot=[
-      0,1,2,3,4,5
-    ].find(
-      x=>!S.players.some(p=>p.slot===x)
-    );
-
-    S.players.push({
-      id:m.id,
-      peer:c.peer,
-      slot,
-
-      name:
-        String(m.name).slice(0,18)
-        ||`Player ${slot+1}`,
-
-      city:
-        String(m.city).slice(0,24)
-        ||"Unknown City",
-
-      lives:3,
-      alive:true,
-      ready:false,
-      isHost:false,
-      connected:true
-    });
-
-    S.conns.set(c.peer,c);
-
-    c.send({
-      type:"welcome",
-      room:S.room,
-      players:S.players.length
-    });
-
-    renderLobby();
-    broadcastState();
-
-    return;
-  }
-
-  if(m.type==="ready"&&S.host){
-
-    const p=S.players.find(
-      x=>x.id===m.id
-    );
-
-    if(p&&!S.started){
-
-      p.ready=!p.ready;
-
-      renderLobby();
-      broadcastState();
-    }
-
-    return;
-  }
-
-  if(m.type==="start"&&S.host){
-
-    if(S.players.length!==6){
-
-      return c?.send({
-        type:"error",
-        message:"Exactly 6 players are required."
-      });
-
-    }
-
-    if(!S.players.every(p=>p.ready)){
-
-      return c?.send({
-        type:"error",
-        message:"All 6 players must be READY."
-      });
-
-    }
-
-    S.started=true;
-    S.turn=0;
-    S.round=1;
-
-    broadcastState();
-    startGameUI();
-
-    return;
-  }
-
-  if(m.type==="roll"&&S.host){
-
-    const p=S.players.find(
-      x=>x.id===m.id
-    );
-
-    if(
-      !p||
-      !S.started||
-      p.slot!==S.turn
-    )return;
-
-    const v=
-      Math.floor(Math.random()*6)+1;
-
-    const t=
-      S.players.find(
-        x=>x.slot===v-1
-      );
-
-    let hit=false;
-
-    if(t?.alive){
-
-      t.lives--;
-      hit=true;
-
-      if(t.lives<1)
-        t.alive=false;
-    }
-
-    const w=winner();
-
-    if(!w)
-      S.turn=nextAlive(S.turn);
-
-    S.round++;
-
-    const packet={
-      type:"roll",
-      value:v,
-      hit,
-      target:t?.name||`Player ${v}`,
-      roller:p.name,
-
-      players:S.players.map(x=>({
-        id:x.id,
-        slot:x.slot,
-        name:x.name,
-        city:x.city,
-        lives:x.lives,
-        alive:x.alive,
-        ready:x.ready,
-        isHost:x.isHost
-      })),
-
-      turn:S.turn,
-      round:S.round,
-      winnerSlot:w?.slot??null
-    };
-
-    sendAll(packet);
-    applyRoll(packet);
-
-    return;
-  }
-
-  if(m.type==="state"){
-
-    S.mode="online";
-    S.players=m.players;
-    S.turn=m.turn;
-    S.round=m.round;
-    S.started=m.phase==="game";
-
-    badge(true);
-
-    renderLobby();
-    show("lobby");
-
-    if(S.started)
-      startGameUI();
-
-    return;
-  }
-
-  if(m.type==="roll"){
-
-    applyRoll(m);
-    return;
-  }
-
-  if(m.type==="error"){
-
-    toast(m.message);
-    status(m.message);
-
-    return;
-  }
-}
-
-function sendAll(m){
-
-  if(!S.host)return;
-
-  S.conns.forEach(c=>{
-
-    try{
-
-      if(c.open)
-        c.send(m);
-
-    }catch{}
-  });
-}
-
-function applyRoll(m){
-
-  S.players=m.players;
-  S.turn=m.turn;
-  S.round=m.round;
-
-  animate(m.value,()=>{
-
-    const target=
-      S.players.find(
-        p=>p.slot===m.value-1
-      );
-
-    $("result").textContent=
-      `🎲 ${m.value} → ${
-        target?.name||m.target
-      } ${
-        m.hit
-        ?"loses 1 life!"
-        :"is already eliminated."
-      }`;
-
-    log(
-      `${m.roller} rolled ${m.value} → ${
-        target?.name||m.target
-      } ${
-        m.hit
-        ?"-1 ❤️"
-        :"no damage"
-      }`
-    );
-
-    renderBoard();
-
-    if(
-      m.winnerSlot!==null&&
-      m.winnerSlot!==undefined
-    ){
-
-      const w=
-        S.players.find(
-          p=>p.slot===m.winnerSlot
-        );
-
-      if(w)
-        showWin(w);
-    }
-
-  });
-}
-
-function showConnection(t){
-
-  $("connectionNotice").textContent=t;
-
-  $("connectionNotice")
-    .classList.remove("hidden");
-}
-
-function startGameUI(){
-
-  $("modeText").textContent=
-    S.mode.toUpperCase();
-
-  $("log").innerHTML="";
-
-  $("result").textContent=
-    "The number decides who loses a life.";
-
-  show("game");
-
-  renderBoard();
-}
-
-$("goOffline").onclick=setupOffline;
-$("goOnline").onclick=setupOnline;
-
-$("backHome").onclick=()=>{
-  cleanPeer();
-  show("home");
-};
-
-$("startOffline").onclick=()=>{
-
-  S.offlineNames=
-    Array.from(
-      {length:6},
-      (_,i)=>({
-        name:
-          $("pn"+i).value.trim()
-          ||`Player ${i+1}`,
-
-        city:
-          $("pc"+i).value.trim()
-          ||`City ${i+1}`
-      })
-    );
-
-  S.players=players6();
-
-  S.players.forEach((p,i)=>{
-
-    p.name=S.offlineNames[i].name;
-    p.city=S.offlineNames[i].city;
-    p.ready=true;
-
-  });
-
-  S.mode="offline";
-  S.started=true;
-  S.turn=0;
-  S.round=1;
-
-  startGameUI();
-};
-
-$("roll").onclick=()=>{
-
-  if(S.mode==="offline"){
-
-    offlineRoll();
-
-  }else{
-
-    const c=
-      S.players.find(
-        p=>p.id===S.myId
-      );
-
-    if(c?.slot===S.turn){
-
-      if(S.host)
-        handleNet({
-          type:"roll",
-          id:S.myId
-        });
-
-      else
-        S.hostConn?.send({
-          type:"roll",
-          id:S.myId
-        });
-    }
-  }
-};
-
-$("createRoom").onclick=()=>{
-
-  const name=
-    $("myName").value.trim()
-    ||"Player 1";
-
-  const city=
-    $("myCity").value.trim()
-    ||"Unknown City";
-
-  const code=makeRoomCode();
-
-  initPeerForHost(
-    code,
-    name,
-    city
-  );
-};
-
-$("joinRoom").onclick=()=>{
-
-  const code=
-    $("roomInput").value
-    .trim()
-    .toUpperCase();
-
-  const name=
-    $("myName").value.trim()
-    ||"Player";
-
-  const city=
-    $("myCity").value.trim()
-    ||"Unknown City";
-
-  if(!/^[A-Z0-9]{6}$/.test(code)){
-
-    return toast(
-      "Enter the 6-character room code."
-    );
-  }
-
-  initPeerForJoin(
-    code,
-    name,
-    city
-  );
-};
-
-$("readyBtn").onclick=()=>{
-
-  if(S.host){
-
-    const p=
-      S.players.find(
-        x=>x.id===S.myId
-      );
-
-    if(p){
-
-      p.ready=!p.ready;
-
-      renderLobby();
-      broadcastState();
-    }
-
-  }else{
-
-    if(
-      S.hostConn &&
-      S.hostConn.open
-    ){
-
-      S.hostConn.send({
-        type:"ready",
-        id:S.myId
-      });
-
-    }else{
+      connectEvents();
 
       toast(
-        "Still connecting to host. Please wait."
+        "Joined room successfully."
+      );
+
+    }
+    catch (err) {
+
+      badge(false);
+
+      status(
+        "Could not join room."
+      );
+
+      toast(
+        err.message ||
+        "Could not join room."
       );
     }
   }
-};
 
-$("startOnline").onclick=()=>{
+  /* =====================================================
+     READY
+     ===================================================== */
 
-  if(!S.host)return;
+  async function toggleReady() {
 
-  if(S.players.length!==6)
-    return toast(
-      "Need exactly 6 players."
+    if (
+      S.mode !== "online" ||
+      !S.room ||
+      !S.myId
+    ) return;
+
+    const me =
+      S.players.find(
+        p => p.id === S.myId
+      );
+
+    if (!me) return;
+
+    const nextReady =
+      !me.ready;
+
+    try {
+
+      status(
+        nextReady
+          ? "Setting READY…"
+          : "Setting NOT READY…"
+      );
+
+      const data =
+        await api(
+          "/api/ready",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              code: S.room,
+              playerId: S.myId,
+              ready: nextReady
+            })
+          }
+        );
+
+      applyServerRoom(
+        data.room
+      );
+
+      status(
+        nextReady
+          ? "READY."
+          : "NOT READY."
+      );
+
+    }
+    catch (err) {
+
+      toast(
+        err.message ||
+        "Could not change READY status."
+      );
+    }
+  }
+
+  /* =====================================================
+     START ONLINE GAME
+     ===================================================== */
+
+  async function startOnlineGame() {
+
+    if (!S.host)
+      return;
+
+    try {
+
+      const data =
+        await api(
+          "/api/start",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              code: S.room,
+              playerId: S.myId
+            })
+          }
+        );
+
+      applyServerRoom(
+        data.room
+      );
+
+    }
+    catch (err) {
+
+      toast(
+        err.message ||
+        "Could not start game."
+      );
+    }
+  }
+
+  /* =====================================================
+     ONLINE ROLL
+     ===================================================== */
+
+  async function onlineRoll() {
+
+    if (
+      S.rolling ||
+      !S.started
+    ) return;
+
+    const me =
+      S.players.find(
+        p => p.id === S.myId
+      );
+
+    const current =
+      S.players.find(
+        p =>
+          p.slot === S.turn &&
+          p.alive
+      );
+
+    if (
+      !me ||
+      !current ||
+      current.id !== me.id
+    ) {
+
+      toast(
+        "Please wait for your turn."
+      );
+
+      return;
+    }
+
+    /*
+      This endpoint will be added to
+      server.js in the final server step.
+    */
+
+    const value =
+      Math.floor(
+        Math.random() * 6
+      ) + 1;
+
+    animate(
+      value,
+      () => {}
     );
 
-  if(!S.players.every(p=>p.ready))
-    return toast(
-      "All 6 players must be READY."
+    try {
+
+      const data =
+        await api(
+          "/api/roll",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              code: S.room,
+              playerId: S.myId,
+              value
+            })
+          }
+        );
+
+      if (data.room) {
+        applyServerRoom(
+          data.room
+        );
+      }
+
+      if (data.roll) {
+        applyOnlineRoll(
+          data.roll
+        );
+      }
+
+    }
+    catch (err) {
+
+      S.rolling = false;
+
+      toast(
+        err.message ||
+        "Could not roll the dice."
+      );
+
+      renderBoard();
+    }
+  }
+
+  /* =====================================================
+     ONLINE ROLL RESULT
+     ===================================================== */
+
+  function applyOnlineRoll(roll) {
+
+    const value =
+      Number(roll.value);
+
+    const target =
+      S.players.find(
+        p =>
+          p.slot === value - 1
+      );
+
+    animate(
+      value,
+      () => {
+
+        if ($("result")) {
+
+          $("result").textContent =
+            `🎲 ${value} → ${
+              target?.name ||
+              `Player ${value}`
+            } ${
+              roll.hit
+                ? "loses 1 life!"
+                : "is already eliminated."
+            }`;
+        }
+
+        log(
+          `${roll.roller} rolled ${value} → ${
+            target?.name ||
+            `Player ${value}`
+          } ${
+            roll.hit
+              ? "-1 ❤️"
+              : "no damage"
+          }`
+        );
+
+        if (roll.room) {
+          applyServerRoom(
+            roll.room
+          );
+        }
+
+        if (
+          roll.winnerSlot !==
+          null &&
+          roll.winnerSlot !== undefined
+        ) {
+
+          const w =
+            S.players.find(
+              p =>
+                p.slot ===
+                roll.winnerSlot
+            );
+
+          if (w)
+            showWin(w);
+        }
+
+      }
     );
-
-  S.started=true;
-  S.turn=0;
-  S.round=1;
-
-  broadcastState();
-  startGameUI();
-};
-
-$("copyRoom").onclick=async()=>{
-
-  try{
-
-    await navigator.clipboard.writeText(
-      S.room
-    );
-
-    toast("Room code copied.");
-
-  }catch{
-
-    toast(S.room);
   }
-};
 
-$("again").onclick=()=>{
+  /* =====================================================
+     START GAME UI
+     ===================================================== */
 
-  if(S.mode==="offline"){
+  function startGameUI() {
 
-    S.players.forEach(p=>{
-      p.lives=3;
-      p.alive=true;
-      p.ready=true;
-    });
+    if ($("modeText"))
+      $("modeText").textContent =
+        S.mode.toUpperCase();
 
-    S.turn=0;
-    S.round=1;
-    S.started=true;
+    if ($("log"))
+      $("log").innerHTML = "";
 
-    startGameUI();
+    if ($("result"))
+      $("result").textContent =
+        "The number decides who loses a life.";
 
-  }else if(S.host){
+    show("game");
 
-    S.players.forEach(p=>{
-      p.lives=3;
-      p.alive=true;
-      p.ready=false;
-    });
-
-    S.started=false;
-    S.turn=0;
-    S.round=1;
-
-    renderLobby();
-    broadcastState();
-    show("lobby");
-
-  }else{
-
-    toast(
-      "Ask the host to start the next game."
-    );
+    renderBoard();
   }
-};
 
-$("menu").onclick=()=>{
-  cleanPeer();
-  location.reload();
-};
+  /* =====================================================
+     BUTTONS
+     ===================================================== */
 
-makeInputs();
-badge(false);
+  if ($("goOffline"))
+    $("goOffline").onclick =
+      setupOffline;
 
-$("safetyOk").onclick=()=>{
-  $("safetyModal").classList.add("hidden");
-};
+  if ($("goOnline"))
+    $("goOnline").onclick =
+      setupOnline;
 
-let deferred;
+  if ($("backHome"))
+    $("backHome").onclick = () => {
+      closeOnline();
+      show("home");
+    };
 
-window.addEventListener(
-  "beforeinstallprompt",
-  e=>{
-    e.preventDefault();
-    deferred=e;
-    $("installBtn").classList.remove("hidden");
-  }
-);
+  if ($("startOffline"))
+    $("startOffline").onclick = () => {
 
-$("installBtn").onclick=async()=>{
+      S.offlineNames =
+        Array.from(
+          { length: 6 },
+          (_, i) => ({
+            name:
+              $("pn" + i)
+                .value
+                .trim()
+              || `Player ${i + 1}`,
 
-  if(deferred){
+            city:
+              $("pc" + i)
+                .value
+                .trim()
+              || `City ${i + 1}`
+          })
+        );
 
-    deferred.prompt();
+      S.players =
+        players6();
 
-    await deferred.userChoice;
+      S.players.forEach(
+        (p, i) => {
 
-    deferred=null;
+          p.name =
+            S.offlineNames[i].name;
 
-    $("installBtn")
-      .classList.add("hidden");
-  }
-};
+          p.city =
+            S.offlineNames[i].city;
 
-/*
-  IMPORTANT:
-  Do not cache the live game JavaScript.
-  The browser must always load the latest app.js.
-*/
+          p.ready = true;
+        }
+      );
 
-if(
-  "serviceWorker" in navigator &&
-  location.protocol!=="file:"
-){
+      S.mode = "offline";
+      S.started = true;
+      S.turn = 0;
+      S.round = 1;
 
-  navigator.serviceWorker
-    .getRegistration()
-    .then(r=>{
-      if(r)
-        r.update().catch(()=>{});
-    })
-    .catch(()=>{});
-}
+      startGameUI();
+    };
+
+  if ($("roll"))
+    $("roll").onclick = () => {
+
+      if (
+        S.mode ===
+        "offline"
+      ) {
+        offlineRoll();
+      }
+      else {
+        onlineRoll();
+      }
+    };
+
+  if ($("createRoom"))
+    $("createRoom").onclick =
+      createOnlineRoom;
+
+  if ($("joinRoom"))
+    $("joinRoom").onclick =
+      joinOnlineRoom;
+
+  if ($("readyBtn"))
+    $("readyBtn").onclick =
+      toggleReady;
+
+  if ($("startOnline"))
+    $("startOnline").onclick =
+      startOnlineGame;
+
+  if ($("copyRoom"))
+    $("copyRoom").onclick =
+      async () => {
+
+        try {
+
+          await navigator.clipboard.writeText(
+            S.room
+          );
+
+          toast(
+            "Room code copied."
+          );
+
+        }
+        catch {
+
+          toast(
+            S.room
+          );
+        }
+      };
+
+  /* =====================================================
+     PLAY AGAIN
+     ===================================================== */
+
+  if ($("again"))
+    $("again").onclick = () => {
+
+      if (
+        S.mode ===
+        "offline"
+      ) {
+
+        S.players.forEach(p => {
+          p.lives = 3;
+          p.alive = true;
+          p.ready = true;
+        });
+
+        S.turn = 0;
+        S.round = 1;
+        S.started = true;
+
+        startGameUI();
+
+      }
+      else if (S.host) {
+
+        toast(
+          "Host can create/start the next round."
+        );
+
+        show("lobby");
+
+      }
+      else {
+
+        toast(
+          "Ask the host to start the next game."
+        );
+      }
+    };
+
+  if ($("menu"))
+    $("menu").onclick = () => {
+      closeOnline();
+      location.reload();
+    };
+
+  /* =====================================================
+     SAFETY
+     ===================================================== */
+
+  makeInputs();
+  badge(false);
+
+  if ($("safetyOk"))
+    $("safetyOk").onclick = () => {
+      $("safetyModal")
+        .classList.add("hidden");
+    };
+
+  /* =====================================================
+     PWA INSTALL
+     ===================================================== */
+
+  let deferred;
+
+  window.addEventListener(
+    "beforeinstallprompt",
+    e => {
+
+      e.preventDefault();
+
+      deferred = e;
+
+      if ($("installBtn"))
+        $("installBtn")
+          .classList.remove("hidden");
+    }
+  );
+
+  if ($("installBtn"))
+    $("installBtn").onclick =
+      async () => {
+
+        if (!deferred)
+          return;
+
+        deferred.prompt();
+
+        await deferred.userChoice;
+
+        deferred = null;
+
+        $("installBtn")
+          .classList.add("hidden");
+      };
 
 })();
