@@ -22,15 +22,15 @@
     host: false,
     myId: "",
 
+    eventSource: null,
+    pollTimer: null,
+
     ready: false,
     rolling: false,
 
     offlineNames: [],
 
-    pollTimer: null,
-    polling: false,
-
-    screen: "home"
+    lastRollId: null
   };
 
   const colors = [
@@ -47,11 +47,7 @@
      ===================================================== */
 
   const show = id => {
-
-    S.screen = id;
-
     screens.forEach(s => {
-
       const el = $(s);
 
       if (el) {
@@ -65,13 +61,12 @@
     window.scrollTo(0, 0);
   };
 
-  function toast(text) {
-
+  function toast(t) {
     const e = $("toast");
 
     if (!e) return;
 
-    e.textContent = text;
+    e.textContent = t;
 
     e.classList.add("show");
 
@@ -85,16 +80,13 @@
       }, 2800);
   }
 
-  function status(text) {
-
+  function status(t) {
     if ($("onlineStatus")) {
-      $("onlineStatus").textContent =
-        text;
+      $("onlineStatus").textContent = t;
     }
   }
 
   function badge(on) {
-
     if (!$("netBadge")) return;
 
     $("netBadge").textContent =
@@ -105,19 +97,17 @@
       (on ? "online" : "offline");
   }
 
-  function esc(value) {
-
-    return String(value || "")
-      .replace(
-        /[&<>"']/g,
-        x => ({
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#39;"
-        }[x])
-      );
+  function esc(s) {
+    return String(s || "").replace(
+      /[&<>"']/g,
+      x => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[x])
+    );
   }
 
   /* =====================================================
@@ -125,31 +115,26 @@
      ===================================================== */
 
   function players6() {
-
     return Array.from(
       { length: 6 },
       (_, i) => ({
+        id: "p" + (i + 1),
 
-        id:
-          "p" + (i + 1),
-
-        slot:
-          i,
+        slot: i,
 
         name:
-          "Player " + (i + 1),
+          "Player " +
+          (i + 1),
 
         city:
-          "City " + (i + 1),
+          "City " +
+          (i + 1),
 
-        lives:
-          3,
+        lives: 3,
 
-        alive:
-          true,
+        alive: true,
 
-        ready:
-          false,
+        ready: false,
 
         isHost:
           i === 0
@@ -158,7 +143,6 @@
   }
 
   function makeInputs() {
-
     const box =
       $("playerInputs");
 
@@ -168,7 +152,6 @@
       Array.from(
         { length: 6 },
         (_, i) => `
-
           <div class="pinput">
 
             <div
@@ -214,26 +197,30 @@
      ===================================================== */
 
   function renderLobby() {
-
     const ps =
-      S.players || [];
+      Array.isArray(S.players)
+        ? S.players
+        : [];
 
     const readyCount =
       ps.filter(
         p => p.ready
       ).length;
 
-    if ($("roomCode"))
+    if ($("roomCode")) {
       $("roomCode").textContent =
         S.room || "------";
+    }
 
-    if ($("count"))
+    if ($("count")) {
       $("count").textContent =
         `${ps.length}/6 PLAYERS`;
+    }
 
-    if ($("readyCount"))
+    if ($("readyCount")) {
       $("readyCount").textContent =
         `${readyCount}/6 READY`;
+    }
 
     if ($("lobbyText")) {
 
@@ -244,10 +231,13 @@
 
         $("lobbyText").textContent =
           `Waiting for ${left} more player${
-            left === 1 ? "" : "s"
+            left === 1
+              ? ""
+              : "s"
           }...`;
 
       }
+
       else if (readyCount < 6) {
 
         $("lobbyText").textContent =
@@ -256,6 +246,7 @@
           } READY.`;
 
       }
+
       else {
 
         $("lobbyText").textContent =
@@ -282,7 +273,8 @@
 
             const p =
               ps.find(
-                x => x.slot === i
+                x =>
+                  x.slot === i
               );
 
             if (!p) {
@@ -293,10 +285,10 @@
                   WAITING...
                 </div>
               `;
+
             }
 
             return `
-
               <div class="slot">
 
                 <span>
@@ -332,15 +324,17 @@
                 }
 
               </div>
-
             `;
+
           }
         ).join("");
+
     }
 
     const me =
       ps.find(
-        p => p.id === S.myId
+        p =>
+          p.id === S.myId
       );
 
     if ($("readyBtn")) {
@@ -352,6 +346,7 @@
 
       $("readyBtn").disabled =
         !me;
+
     }
 
     if ($("startOnline")) {
@@ -362,6 +357,7 @@
           ps.length === 6 &&
           readyCount === 6
         );
+
     }
   }
 
@@ -397,9 +393,10 @@
 
               <div
                 class="avatar"
-                style="border-color:${
-                  colors[p.slot]
-                }"
+                style="
+                  border-color:
+                  ${colors[p.slot]}
+                "
               >
                 P${p.slot + 1}
               </div>
@@ -420,18 +417,16 @@
 
             <div class="hearts">
 
-              ${[0, 1, 2]
-                .map(
-                  i => `
-                    <span class="${
-                      i < p.lives
-                        ? ""
-                        : "empty"
-                    }">
-                      ❤️
-                    </span>
-                  `
-                )
+              ${[0,1,2]
+                .map(i => `
+                  <span class="${
+                    i < p.lives
+                      ? ""
+                      : "empty"
+                  }">
+                    ❤️
+                  </span>
+                `)
                 .join("")}
 
             </div>
@@ -439,34 +434,28 @@
             ${
               p.slot === S.turn &&
               p.alive
-                ? `
-                  <div class="currentlabel">
-                    CURRENT
-                  </div>
-                `
+                ? '<div class="currentlabel">CURRENT</div>'
                 : ""
             }
 
             ${
               !p.alive
-                ? `
-                  <div class="deadlabel">
-                    ELIMINATED
-                  </div>
-                `
+                ? '<div class="deadlabel">ELIMINATED</div>'
                 : ""
             }
 
           </div>
 
-        `).join("");
+        `)
+        .join("");
 
-    if ($("round"))
+    if ($("round")) {
       $("round").textContent =
         `ROUND ${Math.max(
           1,
           S.round
         )}`;
+    }
 
     const cur =
       S.players.find(
@@ -475,17 +464,19 @@
           p.alive
       );
 
-    if ($("turn"))
+    if ($("turn")) {
       $("turn").textContent =
         cur
           ? `${cur.name.toUpperCase()}'S TURN`
           : "GAME OVER";
+    }
 
-    if ($("hint"))
+    if ($("hint")) {
       $("hint").textContent =
         cur
           ? "Roll the dice"
           : "";
+    }
 
     const mine =
       S.mode === "offline" ||
@@ -506,7 +497,7 @@
     }
   }
 
-  function log(text) {
+  function log(t) {
 
     if (!$("log")) return;
 
@@ -518,8 +509,7 @@
     e.className =
       "logitem";
 
-    e.textContent =
-      text;
+    e.textContent = t;
 
     $("log").prepend(e);
   }
@@ -537,11 +527,13 @@
 
       const p =
         S.players.find(
-          x => x.slot === slot
+          x =>
+            x.slot === slot
         );
 
-      if (p?.alive)
+      if (p?.alive) {
         return slot;
+      }
     }
 
     return from;
@@ -563,19 +555,22 @@
 
     if (!w) return;
 
-    if ($("winnerAvatar"))
+    if ($("winnerAvatar")) {
       $("winnerAvatar").textContent =
         "P" + (w.slot + 1);
+    }
 
-    if ($("winnerName"))
+    if ($("winnerName")) {
       $("winnerName").textContent =
         w.name;
+    }
 
-    if ($("winnerCity"))
+    if ($("winnerCity")) {
       $("winnerCity").textContent =
         "📍 " + w.city;
+    }
 
-    if ($("winnerLives"))
+    if ($("winnerLives")) {
       $("winnerLives").textContent =
         "❤️".repeat(
           Math.max(
@@ -583,6 +578,7 @@
             w.lives
           )
         );
+    }
 
     S.started = false;
 
@@ -595,34 +591,42 @@
      DICE ANIMATION
      ===================================================== */
 
-  function animate(value, done) {
+  function animate(
+    value,
+    done
+  ) {
 
     S.rolling = true;
 
-    if ($("roll"))
+    if ($("roll")) {
       $("roll").disabled =
         true;
+    }
 
-    if ($("dice"))
+    if ($("dice")) {
       $("dice").classList.add(
         "rolling"
       );
+    }
 
     setTimeout(() => {
 
-      if ($("dice"))
+      if ($("dice")) {
         $("dice").textContent =
           value;
+      }
 
-      if ($("dice"))
+      if ($("dice")) {
         $("dice").classList.remove(
           "rolling"
         );
+      }
 
       S.rolling = false;
 
-      if (typeof done === "function")
+      if (typeof done === "function") {
         done();
+      }
 
     }, 650);
   }
@@ -636,8 +640,9 @@
     if (
       S.rolling ||
       !S.started
-    )
+    ) {
       return;
+    }
 
     const cur =
       S.players.find(
@@ -646,8 +651,7 @@
           p.alive
       );
 
-    if (!cur)
-      return;
+    if (!cur) return;
 
     const value =
       Math.floor(
@@ -673,28 +677,29 @@
 
           if (
             target.lives < 1
-          )
-            target.alive =
-              false;
+          ) {
+            target.lives = 0;
+            target.alive = false;
+          }
 
-          if ($("result"))
+          if ($("result")) {
             $("result").textContent =
               `🎲 ${value} → ${
                 target.name
               } loses 1 life!`;
+          }
 
           log(
-            `${cur.name} rolled ${value} → ${
-              target.name
-            } -1 ❤️`
+            `${cur.name} rolled ${value} → ${target.name} -1 ❤️`
           );
 
         }
         else {
 
-          if ($("result"))
+          if ($("result")) {
             $("result").textContent =
               `🎲 ${value} → Player ${value} is already eliminated.`;
+          }
 
           log(
             `${cur.name} rolled ${value} → no damage`
@@ -704,8 +709,10 @@
         const w =
           winner();
 
-        if (w)
-          return showWin(w);
+        if (w) {
+          showWin(w);
+          return;
+        }
 
         S.turn =
           nextAlive(
@@ -715,6 +722,7 @@
         S.round++;
 
         renderBoard();
+
       }
     );
   }
@@ -726,6 +734,7 @@
   function setupOffline() {
 
     stopPolling();
+    closeOnline();
 
     S.mode =
       "offline";
@@ -736,42 +745,34 @@
     S.started =
       false;
 
-    S.turn =
-      0;
-
-    S.round =
-      1;
-
-    S.room =
-      "";
-
-    S.myId =
-      "";
-
-    S.host =
-      false;
+    S.turn = 0;
+    S.round = 1;
 
     badge(false);
 
-    if ($("setupEyebrow"))
+    if ($("setupEyebrow")) {
       $("setupEyebrow").textContent =
         "OFFLINE";
+    }
 
-    if ($("setupTitle"))
+    if ($("setupTitle")) {
       $("setupTitle").textContent =
         "Set up 6 players";
+    }
 
-    if ($("offlineSetup"))
+    if ($("offlineSetup")) {
       $("offlineSetup")
         .classList.remove(
           "hidden"
         );
+    }
 
-    if ($("onlineSetup"))
+    if ($("onlineSetup")) {
       $("onlineSetup")
         .classList.add(
           "hidden"
         );
+    }
 
     makeInputs();
 
@@ -780,34 +781,39 @@
 
   function setupOnline() {
 
-    if ($("safetyModal"))
+    if ($("safetyModal")) {
       $("safetyModal")
         .classList.remove(
           "hidden"
         );
+    }
 
-    if ($("setupEyebrow"))
+    if ($("setupEyebrow")) {
       $("setupEyebrow").textContent =
         "ONLINE";
+    }
 
-    if ($("setupTitle"))
+    if ($("setupTitle")) {
       $("setupTitle").textContent =
         "Create or join a room";
+    }
 
-    if ($("offlineSetup"))
+    if ($("offlineSetup")) {
       $("offlineSetup")
         .classList.add(
           "hidden"
         );
+    }
 
-    if ($("onlineSetup"))
+    if ($("onlineSetup")) {
       $("onlineSetup")
         .classList.remove(
           "hidden"
         );
+    }
 
     status(
-      "Enter your details and create or join a room."
+      "Ready to connect."
     );
 
     show("setup");
@@ -819,97 +825,115 @@
 
   async function api(
     url,
-    options = {},
-    timeout = 15000
+    options = {}
   ) {
 
-    const controller =
-      new AbortController();
+    const response =
+      await fetch(
+        url,
+        {
+          ...options,
 
-    const timer =
-      setTimeout(
-        () => controller.abort(),
-        timeout
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            ...(options.headers || {})
+          },
+
+          cache: "no-store"
+        }
       );
+
+    let data;
 
     try {
 
-      const response =
-        await fetch(
-          url,
-          {
-            ...options,
-
-            signal:
-              controller.signal,
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              "Cache-Control":
-                "no-cache",
-
-              ...(options.headers || {})
-            },
-
-            cache:
-              "no-store"
-          }
-        );
-
-      let data;
-
-      try {
-
-        data =
-          await response.json();
-
-      }
-      catch {
-
-        throw new Error(
-          "Server returned an invalid response."
-        );
-      }
-
-      if (
-        !response.ok ||
-        data.ok === false
-      ) {
-
-        throw new Error(
-          data.error ||
-          "Server request failed."
-        );
-      }
-
-      return data;
+      data =
+        await response.json();
 
     }
-    catch (err) {
+    catch {
 
-      if (
-        err.name ===
-        "AbortError"
-      ) {
-
-        throw new Error(
-          "Server took too long to respond. Please try again."
-        );
-      }
-
-      throw err;
-
+      throw new Error(
+        "Server returned an invalid response."
+      );
     }
-    finally {
 
-      clearTimeout(timer);
+    if (
+      !response.ok ||
+      data.ok === false
+    ) {
+
+      throw new Error(
+        data.error ||
+        "Server request failed."
+      );
     }
+
+    return data;
   }
 
   /* =====================================================
-     STOP POLLING
+     SESSION
+     ===================================================== */
+
+  function saveSession() {
+
+    if (
+      S.mode !== "online" ||
+      !S.room ||
+      !S.myId
+    ) {
+      return;
+    }
+
+    try {
+
+      sessionStorage.setItem(
+        "dice6_session",
+        JSON.stringify({
+          room: S.room,
+          myId: S.myId,
+          host: S.host
+        })
+      );
+
+    }
+    catch {}
+  }
+
+  function clearSession() {
+
+    try {
+      sessionStorage.removeItem(
+        "dice6_session"
+      );
+    }
+    catch {}
+  }
+
+  /* =====================================================
+     CLOSE ONLINE
+     ===================================================== */
+
+  function closeOnline() {
+
+    try {
+
+      if (S.eventSource) {
+        S.eventSource.close();
+      }
+
+    }
+    catch {}
+
+    S.eventSource =
+      null;
+  }
+
+  /* =====================================================
+     POLLING FALLBACK
      ===================================================== */
 
   function stopPolling() {
@@ -920,32 +944,96 @@
         S.pollTimer
       );
 
-      S.pollTimer =
-        null;
+      S.pollTimer = null;
+    }
+  }
+
+  function startPolling() {
+
+    stopPolling();
+
+    if (
+      S.mode !== "online" ||
+      !S.room ||
+      !S.myId
+    ) {
+      return;
     }
 
-    S.polling =
-      false;
+    /*
+      SSE is the main realtime connection.
+
+      Polling is the backup.
+
+      त्यामुळे SSE मध्ये काही delay/problem
+      झाला तरी प्रत्येक browser server ची
+      latest room state घेईल.
+    */
+
+    S.pollTimer =
+      setInterval(
+        async () => {
+
+          if (
+            S.mode !== "online" ||
+            !S.room ||
+            !S.myId
+          ) {
+            return;
+          }
+
+          try {
+
+            const data =
+              await api(
+                `/api/state?code=${encodeURIComponent(
+                  S.room
+                )}`
+              );
+
+            if (
+              data &&
+              data.room
+            ) {
+
+              applyServerRoom(
+                data.room
+              );
+
+            }
+
+          }
+          catch (err) {
+
+            /*
+              Polling error silently ignored.
+              SSE may still be connected.
+            */
+
+          }
+
+        },
+        1500
+      );
   }
 
   /* =====================================================
-     APPLY ROOM STATE
+     APPLY SERVER STATE
      ===================================================== */
 
   function applyServerRoom(
-    room,
-    forceScreen = false
+    room
   ) {
 
-    if (!room)
+    if (!room) {
       return;
+    }
 
     const previousStarted =
       S.started;
 
     S.room =
-      room.code ||
-      S.room;
+      room.code;
 
     S.players =
       Array.isArray(
@@ -971,126 +1059,207 @@
         ? room.round
         : 1;
 
+    /*
+      Host is determined from
+      the server state.
+    */
+
+    const me =
+      S.players.find(
+        p =>
+          p.id === S.myId
+      );
+
+    if (me) {
+      S.host =
+        !!me.isHost;
+    }
+
     badge(true);
+
+    saveSession();
+
+    /*
+      IMPORTANT FIX:
+
+      Server says started=true
+      → EVERY connected player
+      automatically enters GAME.
+
+      Player 2–6 do NOT need to
+      press START GAME.
+    */
 
     if (S.started) {
 
-      if (
-        forceScreen ||
-        S.screen !== "game"
-      ) {
+      if (!previousStarted) {
 
-        startGameUI();
-
-      }
-      else {
-
-        renderBoard();
+        status(
+          "Game started. Good luck!"
+        );
 
       }
+
+      startGameUI();
 
     }
     else {
 
       renderLobby();
 
+      /*
+        Never force a player who is
+        already in winner screen back
+        unless room really restarted.
+      */
+
       if (
-        forceScreen ||
-        S.screen !== "lobby"
+        $("lobby") &&
+        !$("lobby").classList.contains(
+          "active"
+        )
       ) {
-
         show("lobby");
-
       }
-    }
+      else {
+        show("lobby");
+      }
 
-    if (
-      !previousStarted &&
-      S.started
-    ) {
-
-      status(
-        "Game started."
-      );
     }
   }
 
   /* =====================================================
-     POLL ROOM STATE
+     REALTIME SERVER EVENTS
      ===================================================== */
 
-  async function pollRoomState() {
-
-    if (
-      !S.room ||
-      !S.myId ||
-      S.polling
-    )
-      return;
-
-    S.polling =
-      true;
-
-    try {
-
-      const data =
-        await api(
-          `/api/state?code=${encodeURIComponent(
-            S.room
-          )}`,
-          {
-            method:
-              "GET"
-          },
-          10000
-        );
-
-      if (data.room) {
-
-        applyServerRoom(
-          data.room
-        );
-
-        status(
-          S.started
-            ? "Game connected."
-            : "Room connected."
-        );
-      }
-
-    }
-    catch (err) {
-
-      console.log(
-        "Room polling:",
-        err.message
-      );
-
-    }
-    finally {
-
-      S.polling =
-        false;
-    }
-  }
-
-  function startPolling() {
-
-    stopPolling();
+  function connectEvents() {
 
     if (
       !S.room ||
       !S.myId
-    )
+    ) {
       return;
+    }
 
-    pollRoomState();
+    closeOnline();
 
-    S.pollTimer =
-      setInterval(
-        pollRoomState,
-        1000
-      );
+    status(
+      "Connecting to room…"
+    );
+
+    const url =
+      `/api/events?code=${encodeURIComponent(
+        S.room
+      )}&playerId=${encodeURIComponent(
+        S.myId
+      )}`;
+
+    const source =
+      new EventSource(url);
+
+    S.eventSource =
+      source;
+
+    source.addEventListener(
+      "connected",
+      () => {
+
+        status(
+          "Connected. Waiting for game..."
+        );
+
+      }
+    );
+
+    source.addEventListener(
+      "state",
+      event => {
+
+        try {
+
+          const room =
+            JSON.parse(
+              event.data
+            );
+
+          applyServerRoom(
+            room
+          );
+
+        }
+        catch {
+
+          toast(
+            "Received invalid room data."
+          );
+
+        }
+
+      }
+    );
+
+    source.addEventListener(
+      "message",
+      event => {
+
+        try {
+
+          const data =
+            JSON.parse(
+              event.data
+            );
+
+          if (
+            data.message ===
+            "GAME_STARTED"
+          ) {
+
+            status(
+              "Game started!"
+            );
+
+          }
+
+          if (
+            data.message ===
+            "ROLL"
+          ) {
+
+            /*
+              Actual roll state comes
+              from /api/state or /api/roll.
+            */
+
+          }
+
+        }
+        catch {}
+
+      }
+    );
+
+    source.onerror =
+      () => {
+
+        if (
+          S.eventSource !==
+          source
+        ) {
+          return;
+        }
+
+        /*
+          Do NOT stop the game.
+
+          Polling continues as
+          fallback.
+        */
+
+        status(
+          "Connection unstable — reconnecting..."
+        );
+
+      };
   }
 
   /* =====================================================
@@ -1107,7 +1276,8 @@
       $("myCity")?.value.trim()
       || "Unknown City";
 
-    stopPolling();
+    closeOnline();
+    startPolling();
 
     S.mode =
       "online";
@@ -1118,7 +1288,7 @@
     badge(true);
 
     status(
-      "Creating room…"
+      "Creating room..."
     );
 
     try {
@@ -1127,8 +1297,7 @@
         await api(
           "/api/create",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
@@ -1144,15 +1313,18 @@
       S.myId =
         data.playerId;
 
+      saveSession();
+
       applyServerRoom(
-        data.room,
-        true
+        data.room
       );
+
+      connectEvents();
 
       startPolling();
 
       toast(
-        `Room ${S.room} created. Share this code.`
+        "Room created. Share the code."
       );
 
     }
@@ -1200,7 +1372,7 @@
 
     if (
       !/^[A-Z0-9]{6}$/.test(
-        code || ""
+        code
       )
     ) {
 
@@ -1211,6 +1383,7 @@
       return;
     }
 
+    closeOnline();
     stopPolling();
 
     S.mode =
@@ -1222,23 +1395,16 @@
     badge(true);
 
     status(
-      "Joining room…"
+      "Joining room..."
     );
 
     try {
-
-      /*
-        IMPORTANT:
-        The request waits only 15 seconds.
-        It cannot stay on JOINING forever.
-      */
 
       const data =
         await api(
           "/api/join",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
@@ -1246,61 +1412,31 @@
                 name,
                 city
               })
-          },
-          15000
+          }
         );
-
-      if (
-        !data.room ||
-        !data.playerId
-      ) {
-
-        throw new Error(
-          "Invalid room response from server."
-        );
-      }
 
       S.room =
-        data.roomCode ||
-        code;
+        data.roomCode;
 
       S.myId =
         data.playerId;
 
-      /*
-        IMPORTANT:
-        Show lobby FIRST.
-        Start polling AFTER that.
-      */
+      saveSession();
 
       applyServerRoom(
-        data.room,
-        true
+        data.room
       );
+
+      connectEvents();
 
       startPolling();
 
-      status(
-        "Room connected."
-      );
-
       toast(
-        `Joined room ${S.room}.`
+        "Joined room successfully."
       );
 
     }
     catch (err) {
-
-      stopPolling();
-
-      S.room =
-        "";
-
-      S.myId =
-        "";
-
-      S.host =
-        false;
 
       badge(false);
 
@@ -1325,8 +1461,9 @@
       S.mode !== "online" ||
       !S.room ||
       !S.myId
-    )
+    ) {
       return;
+    }
 
     const me =
       S.players.find(
@@ -1334,35 +1471,30 @@
           p.id === S.myId
       );
 
-    if (!me)
+    if (!me) {
       return;
+    }
 
     const nextReady =
       !me.ready;
-
-    if ($("readyBtn"))
-      $("readyBtn").disabled =
-        true;
 
     try {
 
       status(
         nextReady
-          ? "Setting READY…"
-          : "Setting NOT READY…"
+          ? "Setting READY..."
+          : "Setting NOT READY..."
       );
 
       const data =
         await api(
           "/api/ready",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
-                code:
-                  S.room,
+                code: S.room,
 
                 playerId:
                   S.myId,
@@ -1391,8 +1523,6 @@
         "Could not change READY status."
       );
 
-      renderLobby();
-
     }
   }
 
@@ -1402,36 +1532,57 @@
 
   async function startOnlineGame() {
 
-    if (!S.host)
+    if (!S.host) {
+
+      toast(
+        "Only the HOST can start the game."
+      );
+
       return;
+    }
 
     if (
-      !S.room ||
-      !S.myId
-    )
-      return;
+      S.players.length !== 6
+    ) {
 
-    if ($("startOnline"))
-      $("startOnline").disabled =
-        true;
+      toast(
+        "All 6 players must join first."
+      );
+
+      return;
+    }
+
+    const readyCount =
+      S.players.filter(
+        p => p.ready
+      ).length;
+
+    if (
+      readyCount !== 6
+    ) {
+
+      toast(
+        "All 6 players must be READY."
+      );
+
+      return;
+    }
 
     try {
 
       status(
-        "Starting game…"
+        "Starting game..."
       );
 
       const data =
         await api(
           "/api/start",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
-                code:
-                  S.room,
+                code: S.room,
 
                 playerId:
                   S.myId
@@ -1439,13 +1590,21 @@
           }
         );
 
+      /*
+        This immediately moves HOST
+        into game.
+
+        All other players receive
+        started=true through SSE
+        and polling.
+      */
+
       applyServerRoom(
-        data.room,
-        true
+        data.room
       );
 
-      status(
-        "Game started."
+      toast(
+        "GAME STARTED!"
       );
 
     }
@@ -1455,8 +1614,6 @@
         err.message ||
         "Could not start game."
       );
-
-      renderLobby();
 
     }
   }
@@ -1470,8 +1627,9 @@
     if (
       S.rolling ||
       !S.started
-    )
+    ) {
       return;
+    }
 
     const me =
       S.players.find(
@@ -1488,19 +1646,8 @@
 
     if (
       !me ||
-      !current
-    ) {
-
-      toast(
-        "Please wait."
-      );
-
-      return;
-    }
-
-    if (
-      current.id !==
-      me.id
+      !current ||
+      current.id !== me.id
     ) {
 
       toast(
@@ -1510,32 +1657,37 @@
       return;
     }
 
-    if ($("roll"))
-      $("roll").disabled =
-        true;
+    /*
+      IMPORTANT:
 
-    status(
-      "Rolling dice…"
-    );
+      Do NOT generate the online
+      dice value here.
+
+      Server decides the value.
+    */
 
     try {
 
-      /*
-        SERVER decides the value.
-        Client does NOT send a dice value.
-      */
+      S.rolling = true;
+
+      if ($("roll")) {
+        $("roll").disabled =
+          true;
+      }
+
+      status(
+        "Rolling dice..."
+      );
 
       const data =
         await api(
           "/api/roll",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
-                code:
-                  S.room,
+                code: S.room,
 
                 playerId:
                   S.myId
@@ -1544,22 +1696,54 @@
         );
 
       if (
+        data.room
+      ) {
+
+        /*
+          Update lives / turn first.
+        */
+
+        S.room =
+          data.room.code;
+
+        S.players =
+          data.room.players;
+
+        S.started =
+          !!data.room.started;
+
+        S.turn =
+          Number.isInteger(
+            data.room.turn
+          )
+            ? data.room.turn
+            : 0;
+
+        S.round =
+          Number.isInteger(
+            data.room.round
+          )
+            ? data.room.round
+            : 1;
+
+      }
+
+      if (
         data.roll
       ) {
 
         applyOnlineRoll(
-          data.roll,
-          data.room
+          data.roll
         );
 
       }
-      else if (
-        data.room
-      ) {
+      else {
 
-        applyServerRoom(
-          data.room
-        );
+        S.rolling =
+          false;
+
+        renderBoard();
+
       }
 
     }
@@ -1582,14 +1766,11 @@
      ===================================================== */
 
   function applyOnlineRoll(
-    roll,
-    room
+    roll
   ) {
 
     const value =
-      Number(
-        roll.value
-      );
+      Number(roll.value);
 
     const target =
       S.players.find(
@@ -1613,6 +1794,7 @@
                 ? "loses 1 life!"
                 : "is already eliminated."
             }`;
+
         }
 
         log(
@@ -1626,18 +1808,11 @@
           }`
         );
 
-        if (room) {
-
-          applyServerRoom(
-            room
-          );
-        }
-
         if (
           roll.winnerSlot !==
-            null &&
+          null &&
           roll.winnerSlot !==
-            undefined
+          undefined
         ) {
 
           const w =
@@ -1647,38 +1822,31 @@
                 roll.winnerSlot
             );
 
+          renderBoard();
+
           if (w) {
 
             /*
-              Use server room values
-              before showing winner.
+              Small delay so the
+              final board state is visible.
             */
 
-            if (room) {
+            setTimeout(
+              () => {
+                showWin(w);
+              },
+              300
+            );
 
-              const freshWinner =
-                room.players?.find(
-                  p =>
-                    p.slot ===
-                    roll.winnerSlot
-                );
-
-              showWin(
-                freshWinner ||
-                w
-              );
-
-            }
-            else {
-
-              showWin(w);
-
-            }
           }
+
+          return;
         }
 
+        renderBoard();
+
         status(
-          "Room connected."
+          "Connected."
         );
 
       }
@@ -1691,21 +1859,151 @@
 
   function startGameUI() {
 
-    if ($("modeText"))
+    if ($("modeText")) {
+
       $("modeText").textContent =
         S.mode.toUpperCase();
 
-    if ($("log"))
-      $("log").innerHTML =
-        "";
+    }
 
-    if ($("result"))
+    if ($("log")) {
+      $("log").innerHTML = "";
+    }
+
+    if ($("result")) {
+
       $("result").textContent =
         "The number decides who loses a life.";
+
+    }
+
+    /*
+      IMPORTANT:
+
+      This function can be called
+      by ANY player when server says
+      started=true.
+
+      Therefore Player 2–6 will
+      automatically enter GAME.
+    */
 
     show("game");
 
     renderBoard();
+  }
+
+  /* =====================================================
+     RESTORE ONLINE SESSION
+     ===================================================== */
+
+  async function restoreOnlineSession() {
+
+    let saved = null;
+
+    try {
+
+      saved =
+        JSON.parse(
+          sessionStorage.getItem(
+            "dice6_session"
+          ) || "null"
+        );
+
+    }
+    catch {
+      saved = null;
+    }
+
+    if (
+      !saved?.room ||
+      !saved?.myId
+    ) {
+      return;
+    }
+
+    S.mode =
+      "online";
+
+    S.room =
+      saved.room;
+
+    S.myId =
+      saved.myId;
+
+    S.host =
+      !!saved.host;
+
+    badge(true);
+
+    status(
+      "Reconnecting to room..."
+    );
+
+    try {
+
+      const data =
+        await api(
+          `/api/state?code=${encodeURIComponent(
+            S.room
+          )}`
+        );
+
+      if (
+        !data.room
+      ) {
+        throw new Error(
+          "Room no longer exists."
+        );
+      }
+
+      const me =
+        data.room.players.find(
+          p =>
+            p.id === S.myId
+        );
+
+      if (!me) {
+        throw new Error(
+          "Player session expired."
+        );
+      }
+
+      S.host =
+        !!me.isHost;
+
+      applyServerRoom(
+        data.room
+      );
+
+      connectEvents();
+
+      startPolling();
+
+      status(
+        data.room.started
+          ? "Game connected."
+          : "Connected to lobby."
+      );
+
+    }
+    catch {
+
+      clearSession();
+
+      S.mode =
+        "offline";
+
+      S.room = "";
+      S.myId = "";
+      S.host = false;
+
+      badge(false);
+
+      status(
+        "Ready to connect."
+      );
+    }
   }
 
   /* =====================================================
@@ -1716,12 +2014,14 @@
 
     $("goOffline").onclick =
       setupOffline;
+
   }
 
   if ($("goOnline")) {
 
     $("goOnline").onclick =
       setupOnline;
+
   }
 
   if ($("backHome")) {
@@ -1730,20 +2030,19 @@
       () => {
 
         stopPolling();
+        closeOnline();
+        clearSession();
 
-        S.room =
-          "";
+        S.mode =
+          "offline";
 
-        S.myId =
-          "";
-
-        S.host =
-          false;
-
-        badge(false);
+        S.room = "";
+        S.myId = "";
+        S.host = false;
 
         show("home");
       };
+
   }
 
   /* =====================================================
@@ -1759,20 +2058,15 @@
           Array.from(
             { length: 6 },
             (_, i) => ({
-
               name:
-                $(
-                  "pn" + i
-                )
+                $("pn" + i)
                   ?.value
                   .trim()
                 ||
                 `Player ${i + 1}`,
 
               city:
-                $(
-                  "pc" + i
-                )
+                $("pc" + i)
                   ?.value
                   .trim()
                 ||
@@ -1787,17 +2081,16 @@
           (p, i) => {
 
             p.name =
-              S.offlineNames[
-                i
-              ].name;
+              S.offlineNames[i]
+                .name;
 
             p.city =
-              S.offlineNames[
-                i
-              ].city;
+              S.offlineNames[i]
+                .city;
 
             p.ready =
               true;
+
           }
         );
 
@@ -1807,14 +2100,13 @@
         S.started =
           true;
 
-        S.turn =
-          0;
-
-        S.round =
-          1;
+        S.turn = 0;
+        S.round = 1;
 
         startGameUI();
+
       };
+
   }
 
   /* =====================================================
@@ -1839,27 +2131,31 @@
           onlineRoll();
 
         }
+
       };
+
   }
 
   /* =====================================================
-     CREATE ROOM
+     CREATE
      ===================================================== */
 
   if ($("createRoom")) {
 
     $("createRoom").onclick =
       createOnlineRoom;
+
   }
 
   /* =====================================================
-     JOIN ROOM
+     JOIN
      ===================================================== */
 
   if ($("joinRoom")) {
 
     $("joinRoom").onclick =
       joinOnlineRoom;
+
   }
 
   /* =====================================================
@@ -1870,6 +2166,7 @@
 
     $("readyBtn").onclick =
       toggleReady;
+
   }
 
   /* =====================================================
@@ -1880,6 +2177,7 @@
 
     $("startOnline").onclick =
       startOnlineGame;
+
   }
 
   /* =====================================================
@@ -1907,8 +2205,11 @@
           toast(
             S.room
           );
+
         }
+
       };
+
   }
 
   /* =====================================================
@@ -1928,40 +2229,27 @@
           S.players.forEach(
             p => {
 
-              p.lives =
-                3;
+              p.lives = 3;
+              p.alive = true;
+              p.ready = true;
 
-              p.alive =
-                true;
-
-              p.ready =
-                true;
             }
           );
 
-          S.turn =
-            0;
-
-          S.round =
-            1;
-
-          S.started =
-            true;
+          S.turn = 0;
+          S.round = 1;
+          S.started = true;
 
           startGameUI();
 
         }
-        else if (
-          S.host
-        ) {
+        else if (S.host) {
 
-          /*
-            Server restart endpoint exists.
-            Use it instead of asking the
-            host to manually refresh.
-          */
+          toast(
+            "Host can create/start the next round."
+          );
 
-          restartOnlineGame();
+          show("lobby");
 
         }
         else {
@@ -1969,64 +2257,11 @@
           toast(
             "Ask the host to start the next game."
           );
+
         }
+
       };
-  }
 
-  /* =====================================================
-     ONLINE RESTART
-     ===================================================== */
-
-  async function restartOnlineGame() {
-
-    if (
-      !S.host ||
-      !S.room ||
-      !S.myId
-    )
-      return;
-
-    try {
-
-      status(
-        "Preparing next game…"
-      );
-
-      const data =
-        await api(
-          "/api/restart",
-          {
-            method:
-              "POST",
-
-            body:
-              JSON.stringify({
-                code:
-                  S.room,
-
-                playerId:
-                  S.myId
-              })
-          }
-        );
-
-      applyServerRoom(
-        data.room,
-        true
-      );
-
-      status(
-        "Lobby ready."
-      );
-
-    }
-    catch (err) {
-
-      toast(
-        err.message ||
-        "Could not restart game."
-      );
-    }
   }
 
   /* =====================================================
@@ -2039,9 +2274,13 @@
       () => {
 
         stopPolling();
+        closeOnline();
+        clearSession();
 
         location.reload();
+
       };
+
   }
 
   /* =====================================================
@@ -2057,35 +2296,42 @@
     $("safetyOk").onclick =
       () => {
 
-        if ($("safetyModal"))
+        if ($("safetyModal")) {
+
           $("safetyModal")
             .classList.add(
               "hidden"
             );
+
+        }
+
       };
+
   }
 
   /* =====================================================
      PWA INSTALL
      ===================================================== */
 
-  let deferredPrompt =
-    null;
+  let deferred;
 
   window.addEventListener(
     "beforeinstallprompt",
-    event => {
+    e => {
 
-      event.preventDefault();
+      e.preventDefault();
 
-      deferredPrompt =
-        event;
+      deferred = e;
 
-      if ($("installBtn"))
+      if ($("installBtn")) {
+
         $("installBtn")
           .classList.remove(
             "hidden"
           );
+
+      }
+
     }
   );
 
@@ -2094,35 +2340,29 @@
     $("installBtn").onclick =
       async () => {
 
-        if (!deferredPrompt)
+        if (!deferred) {
           return;
-
-        deferredPrompt.prompt();
-
-        try {
-          await deferredPrompt.userChoice;
         }
-        catch {}
 
-        deferredPrompt =
-          null;
+        deferred.prompt();
+
+        await deferred.userChoice;
+
+        deferred = null;
 
         $("installBtn")
           .classList.add(
             "hidden"
           );
+
       };
+
   }
 
   /* =====================================================
-     PAGE CLEANUP
+     INITIAL ONLINE SESSION RESTORE
      ===================================================== */
 
-  window.addEventListener(
-    "beforeunload",
-    () => {
-      stopPolling();
-    }
-  );
+  restoreOnlineSession();
 
 })();
