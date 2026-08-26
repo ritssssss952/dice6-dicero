@@ -32,7 +32,8 @@ room = {
   clients: Set(),
   started,
   turn,
-  round
+  round,
+  version
 }
 */
 
@@ -81,30 +82,42 @@ function getRoom(code) {
   );
 }
 
+function touchRoom(room) {
+  room.version =
+    Number(room.version || 0) + 1;
+}
+
 function publicRoom(room) {
   return {
     code: room.code,
 
-    /*
-      IMPORTANT:
-      Send the actual host ID to every client.
-    */
-    hostId: room.hostId,
+    started:
+      !!room.started,
 
-    started: room.started,
-    turn: room.turn,
-    round: room.round,
+    turn:
+      Number.isInteger(room.turn)
+        ? room.turn
+        : 0,
 
-    players: room.players.map(p => ({
-      id: p.id,
-      slot: p.slot,
-      name: p.name,
-      city: p.city,
-      lives: p.lives,
-      alive: p.alive,
-      ready: p.ready,
-      isHost: p.isHost
-    }))
+    round:
+      Number.isInteger(room.round)
+        ? room.round
+        : 1,
+
+    version:
+      Number(room.version || 0),
+
+    players:
+      room.players.map(p => ({
+        id: p.id,
+        slot: p.slot,
+        name: p.name,
+        city: p.city,
+        lives: p.lives,
+        alive: p.alive,
+        ready: p.ready,
+        isHost: p.isHost
+      }))
   };
 }
 
@@ -118,7 +131,13 @@ function json(res, status, data) {
       "application/json; charset=utf-8",
 
     "Cache-Control":
-      "no-store, no-cache, must-revalidate",
+      "no-store, no-cache, must-revalidate, proxy-revalidate",
+
+    "Pragma":
+      "no-cache",
+
+    "Expires":
+      "0",
 
     "Access-Control-Allow-Origin":
       "*"
@@ -187,7 +206,8 @@ function sendEvent(client, event, data) {
 }
 
 function broadcast(room) {
-  const state = publicRoom(room);
+  const state =
+    publicRoom(room);
 
   for (const client of room.clients) {
     sendEvent(
@@ -203,7 +223,11 @@ function broadcastMessage(room, message) {
     sendEvent(
       client,
       "message",
-      { message }
+      {
+        message,
+        version:
+          Number(room.version || 0)
+      }
     );
   }
 }
@@ -247,21 +271,35 @@ async function createRoom(req, res) {
   const room = {
     code,
     hostId,
+
     players: [],
+
     clients: new Set(),
+
     started: false,
+
     turn: 0,
-    round: 1
+
+    round: 1,
+
+    version: 1
   };
 
   room.players.push({
     id: hostId,
+
     slot: 0,
+
     name,
+
     city,
+
     lives: 3,
+
     alive: true,
+
     ready: false,
+
     isHost: true
   });
 
@@ -275,9 +313,15 @@ async function createRoom(req, res) {
     200,
     {
       ok: true,
-      room: publicRoom(room),
-      playerId: hostId,
-      roomCode: code
+
+      room:
+        publicRoom(room),
+
+      playerId:
+        hostId,
+
+      roomCode:
+        code
     }
   );
 }
@@ -367,14 +411,23 @@ async function joinRoom(req, res) {
 
   room.players.push({
     id: playerId,
+
     slot,
+
     name,
+
     city,
+
     lives: 3,
+
     alive: true,
+
     ready: false,
+
     isHost: false
   });
+
+  touchRoom(room);
 
   broadcast(room);
 
@@ -383,9 +436,14 @@ async function joinRoom(req, res) {
     200,
     {
       ok: true,
-      room: publicRoom(room),
+
+      room:
+        publicRoom(room),
+
       playerId,
-      roomCode: room.code
+
+      roomCode:
+        room.code
     }
   );
 }
@@ -416,7 +474,8 @@ async function readyPlayer(req, res) {
 
   const player =
     room.players.find(
-      p => p.id === playerId
+      p =>
+        p.id === playerId
     );
 
   if (!player) {
@@ -438,6 +497,8 @@ async function readyPlayer(req, res) {
   player.ready =
     body.ready !== false;
 
+  touchRoom(room);
+
   broadcast(room);
 
   return json(
@@ -445,7 +506,9 @@ async function readyPlayer(req, res) {
     200,
     {
       ok: true,
-      room: publicRoom(room)
+
+      room:
+        publicRoom(room)
     }
   );
 }
@@ -474,6 +537,10 @@ async function startGame(req, res) {
     );
   }
 
+  /*
+    HOST CHECK
+  */
+
   if (
     room.hostId !==
     playerId
@@ -485,6 +552,10 @@ async function startGame(req, res) {
     );
   }
 
+  /*
+    EXACTLY 6 PLAYERS
+  */
+
   if (
     room.players.length !== 6
   ) {
@@ -495,9 +566,13 @@ async function startGame(req, res) {
     );
   }
 
+  /*
+    ALL READY
+  */
+
   if (
     !room.players.every(
-      p => p.ready
+      p => p.ready === true
     )
   ) {
     return error(
@@ -507,28 +582,80 @@ async function startGame(req, res) {
     );
   }
 
+  /*
+    START GAME
+  */
+
   room.started = true;
+
   room.turn = 0;
+
   room.round = 1;
 
-  room.players.forEach(p => {
-    p.lives = 3;
-    p.alive = true;
-  });
+  room.players.forEach(
+    p => {
+      p.lives = 3;
+      p.alive = true;
+    }
+  );
 
-  broadcast(room);
+  touchRoom(room);
+
+  /*
+    IMPORTANT:
+    FIRST broadcast the COMPLETE
+    started=true state.
+  */
+
+  const state =
+    publicRoom(room);
+
+  for (const client of room.clients) {
+    sendEvent(
+      client,
+      "state",
+      state
+    );
+  }
+
+  /*
+    Then send explicit GAME_STARTED
+    event.
+  */
+
+  for (const client of room.clients) {
+    sendEvent(
+      client,
+      "game_started",
+      {
+        started: true,
+        room: state
+      }
+    );
+  }
+
+  /*
+    Normal message also sent.
+  */
 
   broadcastMessage(
     room,
     "GAME_STARTED"
   );
 
+  /*
+    Return same state to HOST.
+  */
+
   return json(
     res,
     200,
     {
       ok: true,
-      room: publicRoom(room)
+
+      started: true,
+
+      room: state
     }
   );
 }
@@ -538,13 +665,18 @@ async function startGame(req, res) {
    ========================================================= */
 
 function nextAlive(room, from) {
-  for (let n = 1; n <= 6; n++) {
+  for (
+    let n = 1;
+    n <= 6;
+    n++
+  ) {
     const slot =
       (from + n) % 6;
 
     const p =
       room.players.find(
-        x => x.slot === slot
+        x =>
+          x.slot === slot
       );
 
     if (
@@ -607,7 +739,8 @@ async function rollDice(req, res) {
 
   const roller =
     room.players.find(
-      p => p.id === playerId
+      p =>
+        p.id === playerId
     );
 
   if (!roller) {
@@ -686,18 +819,29 @@ async function rollDice(req, res) {
 
   room.round++;
 
+  touchRoom(room);
+
   const roll = {
     value,
+
     hit,
-    roller: roller.name,
+
+    roller:
+      roller.name,
+
     target:
       target?.name ||
       `Player ${value}`,
+
     winnerSlot:
       winner
         ? winner.slot
         : null
   };
+
+  /*
+    Send new state to everybody.
+  */
 
   broadcast(room);
 
@@ -711,8 +855,11 @@ async function rollDice(req, res) {
     200,
     {
       ok: true,
+
       roll,
-      room: publicRoom(room)
+
+      room:
+        publicRoom(room)
     }
   );
 }
@@ -753,16 +900,22 @@ async function restartGame(req, res) {
   }
 
   room.started = false;
+
   room.turn = 0;
+
   room.round = 1;
 
   room.players.forEach(
     p => {
       p.lives = 3;
+
       p.alive = true;
+
       p.ready = false;
     }
   );
+
+  touchRoom(room);
 
   broadcast(room);
 
@@ -771,7 +924,9 @@ async function restartGame(req, res) {
     200,
     {
       ok: true,
-      room: publicRoom(room)
+
+      room:
+        publicRoom(room)
     }
   );
 }
@@ -784,7 +939,7 @@ function roomState(req, res) {
   const code =
     String(
       req.query.code || ""
-    ).toUpperCase();
+    ).trim().toUpperCase();
 
   const room =
     getRoom(code);
@@ -802,13 +957,15 @@ function roomState(req, res) {
     200,
     {
       ok: true,
-      room: publicRoom(room)
+
+      room:
+        publicRoom(room)
     }
   );
 }
 
 /* =========================================================
-   REALTIME SSE EVENTS
+   SSE EVENTS
    ========================================================= */
 
 function connectEvents(req, res) {
@@ -837,7 +994,8 @@ function connectEvents(req, res) {
 
   const player =
     room.players.find(
-      p => p.id === playerId
+      p =>
+        p.id === playerId
     );
 
   if (!player) {
@@ -877,7 +1035,7 @@ function connectEvents(req, res) {
 
   try {
     res.write(
-      "retry: 2000\n\n"
+      "retry: 1000\n\n"
     );
 
     res.write(
@@ -895,11 +1053,32 @@ function connectEvents(req, res) {
     }
   );
 
+  /*
+    Immediately send latest state.
+  */
+
   sendEvent(
     res,
     "state",
     publicRoom(room)
   );
+
+  /*
+    If game has already started,
+    explicitly tell this client.
+  */
+
+  if (room.started) {
+    sendEvent(
+      res,
+      "game_started",
+      {
+        started: true,
+        room:
+          publicRoom(room)
+      }
+    );
+  }
 
   const heartbeat =
     setInterval(
@@ -969,6 +1148,10 @@ const server =
             }`
           );
 
+        /* =================================================
+           CORS
+           ================================================= */
+
         if (
           req.method ===
           "OPTIONS"
@@ -990,6 +1173,10 @@ const server =
           return res.end();
         }
 
+        /* =================================================
+           HEALTH
+           ================================================= */
+
         if (
           req.method === "GET" &&
           url.pathname === "/health"
@@ -1005,6 +1192,10 @@ const server =
           );
         }
 
+        /* =================================================
+           CREATE
+           ================================================= */
+
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1015,6 +1206,10 @@ const server =
             res
           );
         }
+
+        /* =================================================
+           JOIN
+           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1027,6 +1222,10 @@ const server =
           );
         }
 
+        /* =================================================
+           READY
+           ================================================= */
+
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1037,6 +1236,10 @@ const server =
             res
           );
         }
+
+        /* =================================================
+           START
+           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1049,6 +1252,10 @@ const server =
           );
         }
 
+        /* =================================================
+           ROLL
+           ================================================= */
+
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1059,6 +1266,10 @@ const server =
             res
           );
         }
+
+        /* =================================================
+           RESTART
+           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1071,6 +1282,10 @@ const server =
           );
         }
 
+        /* =================================================
+           STATE
+           ================================================= */
+
         if (
           req.method === "GET" &&
           url.pathname ===
@@ -1082,6 +1297,10 @@ const server =
           );
         }
 
+        /* =================================================
+           SSE
+           ================================================= */
+
         if (
           req.method === "GET" &&
           url.pathname ===
@@ -1092,6 +1311,10 @@ const server =
             res
           );
         }
+
+        /* =================================================
+           STATIC FILES
+           ================================================= */
 
         let requestPath =
           decodeURIComponent(
