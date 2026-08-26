@@ -61,7 +61,6 @@ function makeRoomCode() {
         Math.floor(Math.random() * chars.length)
       ];
     }
-
   } while (rooms.has(code));
 
   return code;
@@ -114,7 +113,8 @@ function json(res, status, data) {
     "Cache-Control":
       "no-store, no-cache, must-revalidate",
 
-    "Access-Control-Allow-Origin": "*"
+    "Access-Control-Allow-Origin":
+      "*"
   });
 
   res.end(JSON.stringify(data));
@@ -133,11 +133,9 @@ function error(res, status, message) {
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
-
     let body = "";
 
     req.on("data", chunk => {
-
       body += chunk;
 
       if (body.length > 1000000) {
@@ -150,7 +148,6 @@ function readJson(req) {
     });
 
     req.on("end", () => {
-
       if (!body) {
         resolve({});
         return;
@@ -158,13 +155,11 @@ function readJson(req) {
 
       try {
         resolve(JSON.parse(body));
-      }
-      catch {
+      } catch {
         reject(
           new Error("Invalid JSON")
         );
       }
-
     });
 
     req.on("error", reject);
@@ -176,25 +171,18 @@ function readJson(req) {
    ========================================================= */
 
 function sendEvent(client, event, data) {
-
   try {
-
     client.write(
       `event: ${event}\n` +
       `data: ${JSON.stringify(data)}\n\n`
     );
-
-  }
-  catch {}
+  } catch {}
 }
 
 function broadcast(room) {
-
-  const state =
-    publicRoom(room);
+  const state = publicRoom(room);
 
   for (const client of room.clients) {
-
     sendEvent(
       client,
       "state",
@@ -204,9 +192,7 @@ function broadcast(room) {
 }
 
 function broadcastMessage(room, message) {
-
   for (const client of room.clients) {
-
     sendEvent(
       client,
       "message",
@@ -220,7 +206,6 @@ function broadcastMessage(room, message) {
    ========================================================= */
 
 async function createRoom(req, res) {
-
   const body =
     await readJson(req);
 
@@ -230,19 +215,21 @@ async function createRoom(req, res) {
   const city =
     cleanText(body.city, 24);
 
-  if (!name)
+  if (!name) {
     return error(
       res,
       400,
       "Player name is required."
     );
+  }
 
-  if (!city)
+  if (!city) {
     return error(
       res,
       400,
       "City is required."
     );
+  }
 
   const code =
     makeRoomCode();
@@ -251,38 +238,23 @@ async function createRoom(req, res) {
     randomId();
 
   const room = {
-
     code,
-
     hostId,
-
     players: [],
-
     clients: new Set(),
-
     started: false,
-
     turn: 0,
-
     round: 1
   };
 
   room.players.push({
-
     id: hostId,
-
     slot: 0,
-
     name,
-
     city,
-
     lives: 3,
-
     alive: true,
-
     ready: false,
-
     isHost: true
   });
 
@@ -296,15 +268,9 @@ async function createRoom(req, res) {
     200,
     {
       ok: true,
-
-      room:
-        publicRoom(room),
-
-      playerId:
-        hostId,
-
-      roomCode:
-        code
+      room: publicRoom(room),
+      playerId: hostId,
+      roomCode: code
     }
   );
 }
@@ -314,7 +280,6 @@ async function createRoom(req, res) {
    ========================================================= */
 
 async function joinRoom(req, res) {
-
   const body =
     await readJson(req);
 
@@ -336,50 +301,56 @@ async function joinRoom(req, res) {
       24
     );
 
-  if (!code)
+  if (!code) {
     return error(
       res,
       400,
       "Room code is required."
     );
+  }
 
-  if (!name)
+  if (!name) {
     return error(
       res,
       400,
       "Player name is required."
     );
+  }
 
-  if (!city)
+  if (!city) {
     return error(
       res,
       400,
       "City is required."
     );
+  }
 
   const room =
     getRoom(code);
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
-  if (room.started)
+  if (room.started) {
     return error(
       res,
       400,
       "Game has already started."
     );
+  }
 
-  if (room.players.length >= 6)
+  if (room.players.length >= 6) {
     return error(
       res,
       400,
       "Room is full."
     );
+  }
 
   const playerId =
     randomId();
@@ -388,21 +359,13 @@ async function joinRoom(req, res) {
     room.players.length;
 
   room.players.push({
-
     id: playerId,
-
     slot,
-
     name,
-
     city,
-
     lives: 3,
-
     alive: true,
-
     ready: false,
-
     isHost: false
   });
 
@@ -413,14 +376,9 @@ async function joinRoom(req, res) {
     200,
     {
       ok: true,
-
-      room:
-        publicRoom(room),
-
+      room: publicRoom(room),
       playerId,
-
-      roomCode:
-        room.code
+      roomCode: room.code
     }
   );
 }
@@ -430,7 +388,6 @@ async function joinRoom(req, res) {
    ========================================================= */
 
 async function readyPlayer(req, res) {
-
   const body =
     await readJson(req);
 
@@ -442,31 +399,34 @@ async function readyPlayer(req, res) {
       body.playerId || ""
     );
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
   const player =
     room.players.find(
       p => p.id === playerId
     );
 
-  if (!player)
+  if (!player) {
     return error(
       res,
       404,
       "Player not found."
     );
+  }
 
-  if (room.started)
+  if (room.started) {
     return error(
       res,
       400,
       "Game already started."
     );
+  }
 
   player.ready =
     body.ready !== false;
@@ -478,8 +438,7 @@ async function readyPlayer(req, res) {
     200,
     {
       ok: true,
-      room:
-        publicRoom(room)
+      room: publicRoom(room)
     }
   );
 }
@@ -489,7 +448,6 @@ async function readyPlayer(req, res) {
    ========================================================= */
 
 async function startGame(req, res) {
-
   const body =
     await readJson(req);
 
@@ -501,53 +459,61 @@ async function startGame(req, res) {
       body.playerId || ""
     );
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
   if (
     room.hostId !==
     playerId
-  )
+  ) {
     return error(
       res,
       403,
       "Only the host can start the game."
     );
+  }
 
   if (
     room.players.length !== 6
-  )
+  ) {
     return error(
       res,
       400,
       "Exactly 6 players are required."
     );
+  }
 
   if (
     !room.players.every(
       p => p.ready
     )
-  )
+  ) {
     return error(
       res,
       400,
       "All 6 players must be READY."
     );
+  }
 
   room.started = true;
-
   room.turn = 0;
-
   room.round = 1;
 
   room.players.forEach(p => {
     p.lives = 3;
     p.alive = true;
   });
+
+  /*
+    IMPORTANT:
+    Broadcast the new STARTED state
+    to every connected player.
+  */
 
   broadcast(room);
 
@@ -561,9 +527,7 @@ async function startGame(req, res) {
     200,
     {
       ok: true,
-
-      room:
-        publicRoom(room)
+      room: publicRoom(room)
     }
   );
 }
@@ -573,20 +537,13 @@ async function startGame(req, res) {
    ========================================================= */
 
 function nextAlive(room, from) {
-
-  for (
-    let n = 1;
-    n <= 6;
-    n++
-  ) {
-
+  for (let n = 1; n <= 6; n++) {
     const slot =
       (from + n) % 6;
 
     const p =
       room.players.find(
-        x =>
-          x.slot === slot
+        x => x.slot === slot
       );
 
     if (
@@ -605,7 +562,6 @@ function nextAlive(room, from) {
    ========================================================= */
 
 function getWinner(room) {
-
   const alive =
     room.players.filter(
       p => p.alive
@@ -621,7 +577,6 @@ function getWinner(room) {
    ========================================================= */
 
 async function rollDice(req, res) {
-
   const body =
     await readJson(req);
 
@@ -633,32 +588,34 @@ async function rollDice(req, res) {
       body.playerId || ""
     );
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
-  if (!room.started)
+  if (!room.started) {
     return error(
       res,
       400,
       "Game has not started."
     );
+  }
 
   const roller =
     room.players.find(
-      p =>
-        p.id === playerId
+      p => p.id === playerId
     );
 
-  if (!roller)
+  if (!roller) {
     return error(
       res,
       404,
       "Player not found."
     );
+  }
 
   const current =
     room.players.find(
@@ -667,22 +624,24 @@ async function rollDice(req, res) {
         p.alive
     );
 
-  if (!current)
+  if (!current) {
     return error(
       res,
       400,
       "No current player."
     );
+  }
 
   if (
     current.id !==
     roller.id
-  )
+  ) {
     return error(
       res,
       400,
       "It is not your turn."
     );
+  }
 
   /*
     SERVER decides the dice value.
@@ -706,7 +665,6 @@ async function rollDice(req, res) {
     target &&
     target.alive
   ) {
-
     target.lives--;
 
     hit = true;
@@ -714,9 +672,7 @@ async function rollDice(req, res) {
     if (
       target.lives <= 0
     ) {
-
       target.lives = 0;
-
       target.alive = false;
     }
   }
@@ -725,7 +681,6 @@ async function rollDice(req, res) {
     getWinner(room);
 
   if (!winner) {
-
     room.turn =
       nextAlive(
         room,
@@ -736,23 +691,22 @@ async function rollDice(req, res) {
   room.round++;
 
   const roll = {
-
     value,
-
     hit,
-
-    roller:
-      roller.name,
-
+    roller: roller.name,
     target:
       target?.name ||
       `Player ${value}`,
-
     winnerSlot:
       winner
         ? winner.slot
         : null
   };
+
+  /*
+    Broadcast updated game state
+    to ALL players.
+  */
 
   broadcast(room);
 
@@ -766,11 +720,8 @@ async function rollDice(req, res) {
     200,
     {
       ok: true,
-
       roll,
-
-      room:
-        publicRoom(room)
+      room: publicRoom(room)
     }
   );
 }
@@ -780,7 +731,6 @@ async function rollDice(req, res) {
    ========================================================= */
 
 async function restartGame(req, res) {
-
   const body =
     await readJson(req);
 
@@ -792,36 +742,33 @@ async function restartGame(req, res) {
       body.playerId || ""
     );
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
   if (
     room.hostId !==
     playerId
-  )
+  ) {
     return error(
       res,
       403,
       "Only the host can restart."
     );
+  }
 
   room.started = false;
-
   room.turn = 0;
-
   room.round = 1;
 
   room.players.forEach(
     p => {
-
       p.lives = 3;
-
       p.alive = true;
-
       p.ready = false;
     }
   );
@@ -833,9 +780,7 @@ async function restartGame(req, res) {
     200,
     {
       ok: true,
-
-      room:
-        publicRoom(room)
+      room: publicRoom(room)
     }
   );
 }
@@ -845,7 +790,6 @@ async function restartGame(req, res) {
    ========================================================= */
 
 function roomState(req, res) {
-
   const code =
     String(
       req.query.code || ""
@@ -854,35 +798,35 @@ function roomState(req, res) {
   const room =
     getRoom(code);
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
   return json(
     res,
     200,
     {
       ok: true,
-
-      room:
-        publicRoom(room)
+      room: publicRoom(room)
     }
   );
 }
 
 /* =========================================================
-   REALTIME EVENTS
+   REALTIME SSE EVENTS
    ========================================================= */
 
 function connectEvents(req, res) {
-
   const code =
     String(
       req.query.code || ""
-    ).trim().toUpperCase();
+    )
+      .trim()
+      .toUpperCase();
 
   const playerId =
     String(
@@ -892,28 +836,30 @@ function connectEvents(req, res) {
   const room =
     getRoom(code);
 
-  if (!room)
+  if (!room) {
     return error(
       res,
       404,
       "Room not found."
     );
+  }
 
   const player =
     room.players.find(
       p => p.id === playerId
     );
 
-  if (!player)
+  if (!player) {
     return error(
       res,
       404,
       "Player not found."
     );
+  }
 
-  /* =====================================================
-     SSE CONNECTION
-     ===================================================== */
+  /*
+    SSE HEADERS
+  */
 
   res.writeHead(
     200,
@@ -936,20 +882,20 @@ function connectEvents(req, res) {
   );
 
   /*
-    IMPORTANT:
+    IMPORTANT FOR RENDER:
     Force headers to be sent immediately.
-    This prevents Render/proxy buffering from
-    delaying realtime game events.
   */
 
-  if (typeof res.flushHeaders === "function") {
+  if (
+    typeof res.flushHeaders ===
+    "function"
+  ) {
     res.flushHeaders();
   }
 
   /*
-    Send an immediate SSE comment.
-    This establishes the realtime stream
-    immediately for every player.
+    Tell browser how quickly
+    to reconnect if connection drops.
   */
 
   try {
@@ -960,18 +906,18 @@ function connectEvents(req, res) {
     res.write(
       ": connected\n\n"
     );
-  }
-  catch {}
+  } catch {}
 
-  /* =====================================================
-     REGISTER CLIENT
-     ===================================================== */
+  /*
+    Register this player's
+    realtime connection.
+  */
 
   room.clients.add(res);
 
-  /* =====================================================
-     CONNECTED EVENT
-     ===================================================== */
+  /*
+    Connected event.
+  */
 
   sendEvent(
     res,
@@ -981,9 +927,9 @@ function connectEvents(req, res) {
     }
   );
 
-  /* =====================================================
-     SEND CURRENT ROOM STATE
-     ===================================================== */
+  /*
+    Immediately send current room state.
+  */
 
   sendEvent(
     res,
@@ -991,23 +937,19 @@ function connectEvents(req, res) {
     publicRoom(room)
   );
 
-  /* =====================================================
-     HEARTBEAT
-     ===================================================== */
+  /*
+    HEARTBEAT
+    Keeps Render/proxy connection alive.
+  */
 
   const heartbeat =
     setInterval(
       () => {
-
         try {
-
           res.write(
             `: heartbeat ${Date.now()}\n\n`
           );
-
-        }
-        catch {
-
+        } catch {
           clearInterval(
             heartbeat
           );
@@ -1016,19 +958,17 @@ function connectEvents(req, res) {
             res
           );
         }
-
       },
       10000
     );
 
-  /* =====================================================
-     DISCONNECT
-     ===================================================== */
+  /*
+    PLAYER DISCONNECT
+  */
 
   req.on(
     "close",
     () => {
-
       clearInterval(
         heartbeat
       );
@@ -1039,15 +979,13 @@ function connectEvents(req, res) {
 
       try {
         res.end();
-      }
-      catch {}
+      } catch {}
     }
   );
 
   res.on(
     "error",
     () => {
-
       clearInterval(
         heartbeat
       );
@@ -1058,3 +996,301 @@ function connectEvents(req, res) {
     }
   );
 }
+
+/* =========================================================
+   HTTP SERVER
+   ========================================================= */
+
+const server =
+  http.createServer(
+    async (req, res) => {
+      try {
+        const url =
+          new URL(
+            req.url,
+            `http://${
+              req.headers.host ||
+              "localhost"
+            }`
+          );
+
+        /* =================================================
+           CORS
+           ================================================= */
+
+        if (
+          req.method ===
+          "OPTIONS"
+        ) {
+          res.writeHead(
+            204,
+            {
+              "Access-Control-Allow-Origin":
+                "*",
+
+              "Access-Control-Allow-Methods":
+                "GET,POST,OPTIONS",
+
+              "Access-Control-Allow-Headers":
+                "Content-Type"
+            }
+          );
+
+          return res.end();
+        }
+
+        /* =================================================
+           HEALTH
+           ================================================= */
+
+        if (
+          req.method === "GET" &&
+          url.pathname === "/health"
+        ) {
+          return json(
+            res,
+            200,
+            {
+              ok: true,
+              game: "DICE 6",
+              rooms: rooms.size
+            }
+          );
+        }
+
+        /* =================================================
+           CREATE
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/create"
+        ) {
+          return await createRoom(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           JOIN
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/join"
+        ) {
+          return await joinRoom(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           READY
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/ready"
+        ) {
+          return await readyPlayer(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           START
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/start"
+        ) {
+          return await startGame(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           ROLL
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/roll"
+        ) {
+          return await rollDice(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           RESTART
+           ================================================= */
+
+        if (
+          req.method === "POST" &&
+          url.pathname ===
+            "/api/restart"
+        ) {
+          return await restartGame(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           STATE
+           ================================================= */
+
+        if (
+          req.method === "GET" &&
+          url.pathname ===
+            "/api/state"
+        ) {
+          return roomState(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           REALTIME SSE
+           ================================================= */
+
+        if (
+          req.method === "GET" &&
+          url.pathname ===
+            "/api/events"
+        ) {
+          return connectEvents(
+            req,
+            res
+          );
+        }
+
+        /* =================================================
+           STATIC FILES
+           ================================================= */
+
+        let requestPath =
+          decodeURIComponent(
+            url.pathname
+          );
+
+        if (
+          requestPath === "/"
+        ) {
+          requestPath =
+            "/index.html";
+        }
+
+        const filePath =
+          path.resolve(
+            ROOT,
+            "." + requestPath
+          );
+
+        /*
+          SECURITY CHECK
+        */
+
+        if (
+          filePath !== ROOT &&
+          !filePath.startsWith(
+            ROOT + path.sep
+          )
+        ) {
+          res.writeHead(
+            403,
+            {
+              "Content-Type":
+                "text/plain"
+            }
+          );
+
+          return res.end(
+            "Forbidden"
+          );
+        }
+
+        fs.readFile(
+          filePath,
+          (err, data) => {
+            if (err) {
+              console.log(
+                "FILE NOT FOUND:",
+                filePath
+              );
+
+              res.writeHead(
+                404,
+                {
+                  "Content-Type":
+                    "text/plain"
+                }
+              );
+
+              return res.end(
+                "Not Found"
+              );
+            }
+
+            const ext =
+              path.extname(
+                filePath
+              ).toLowerCase();
+
+            res.writeHead(
+              200,
+              {
+                "Content-Type":
+                  mimeTypes[ext] ||
+                  "application/octet-stream",
+
+                "Cache-Control":
+                  "no-store, no-cache, must-revalidate, proxy-revalidate"
+              }
+            );
+
+            res.end(data);
+          }
+        );
+
+      } catch (err) {
+        console.error(
+          "SERVER ERROR:",
+          err
+        );
+
+        return error(
+          res,
+          500,
+          "Internal server error."
+        );
+      }
+    }
+  );
+
+/* =========================================================
+   START SERVER
+   ========================================================= */
+
+server.listen(
+  PORT,
+  "0.0.0.0",
+  () => {
+    console.log(
+      `DICE 6 server running on port ${PORT}`
+    );
+  }
+);
