@@ -349,11 +349,21 @@
 
     }
 
+    /*
+      IMPORTANT:
+      START GAME is enabled using
+      the actual server host ID.
+    */
+
+    const amHost =
+      S.host ||
+      me?.isHost === true;
+
     if ($("startOnline")) {
 
       $("startOnline").disabled =
         !(
-          S.host &&
+          amHost &&
           ps.length === 6 &&
           readyCount === 6
         );
@@ -960,16 +970,6 @@
       return;
     }
 
-    /*
-      SSE is the main realtime connection.
-
-      Polling is the backup.
-
-      त्यामुळे SSE मध्ये काही delay/problem
-      झाला तरी प्रत्येक browser server ची
-      latest room state घेईल.
-    */
-
     S.pollTimer =
       setInterval(
         async () => {
@@ -1060,8 +1060,11 @@
         : 1;
 
     /*
-      Host is determined from
-      the server state.
+      IMPORTANT FIX:
+
+      The SERVER sends hostId.
+      Therefore every browser can
+      correctly know who the host is.
     */
 
     const me =
@@ -1070,9 +1073,21 @@
           p.id === S.myId
       );
 
-    if (me) {
+    if (room.hostId) {
+
+      S.host =
+        room.hostId === S.myId;
+
+    }
+    else if (me) {
+
+      /*
+        Fallback for old server state.
+      */
+
       S.host =
         !!me.isHost;
+
     }
 
     badge(true);
@@ -1080,14 +1095,9 @@
     saveSession();
 
     /*
-      IMPORTANT FIX:
-
       Server says started=true
       → EVERY connected player
       automatically enters GAME.
-
-      Player 2–6 do NOT need to
-      press START GAME.
     */
 
     if (S.started) {
@@ -1107,23 +1117,7 @@
 
       renderLobby();
 
-      /*
-        Never force a player who is
-        already in winner screen back
-        unless room really restarted.
-      */
-
-      if (
-        $("lobby") &&
-        !$("lobby").classList.contains(
-          "active"
-        )
-      ) {
-        show("lobby");
-      }
-      else {
-        show("lobby");
-      }
+      show("lobby");
 
     }
   }
@@ -1248,13 +1242,6 @@
           return;
         }
 
-        /*
-          Do NOT stop the game.
-
-          Polling continues as
-          fallback.
-        */
-
         status(
           "Connection unstable — reconnecting..."
         );
@@ -1312,6 +1299,17 @@
 
       S.myId =
         data.playerId;
+
+      /*
+        Make absolutely sure the host
+        state comes from the server.
+      */
+
+      if (data.room?.hostId) {
+        S.host =
+          data.room.hostId ===
+          S.myId;
+      }
 
       saveSession();
 
@@ -1420,6 +1418,12 @@
 
       S.myId =
         data.playerId;
+
+      if (data.room?.hostId) {
+        S.host =
+          data.room.hostId ===
+          S.myId;
+      }
 
       saveSession();
 
@@ -1532,7 +1536,23 @@
 
   async function startOnlineGame() {
 
-    if (!S.host) {
+    /*
+      IMPORTANT:
+      Determine host from both the
+      server hostId and player's isHost.
+    */
+
+    const me =
+      S.players.find(
+        p =>
+          p.id === S.myId
+      );
+
+    const amHost =
+      S.host ||
+      me?.isHost === true;
+
+    if (!amHost) {
 
       toast(
         "Only the HOST can start the game."
@@ -1591,12 +1611,8 @@
         );
 
       /*
-        This immediately moves HOST
-        into game.
-
-        All other players receive
-        started=true through SSE
-        and polling.
+        Server changes started=true
+        and broadcasts to everyone.
       */
 
       applyServerRoom(
@@ -1657,15 +1673,6 @@
       return;
     }
 
-    /*
-      IMPORTANT:
-
-      Do NOT generate the online
-      dice value here.
-
-      Server decides the value.
-    */
-
     try {
 
       S.rolling = true;
@@ -1698,10 +1705,6 @@
       if (
         data.room
       ) {
-
-        /*
-          Update lives / turn first.
-        */
 
         S.room =
           data.room.code;
@@ -1826,11 +1829,6 @@
 
           if (w) {
 
-            /*
-              Small delay so the
-              final board state is visible.
-            */
-
             setTimeout(
               () => {
                 showWin(w);
@@ -1876,17 +1874,6 @@
         "The number decides who loses a life.";
 
     }
-
-    /*
-      IMPORTANT:
-
-      This function can be called
-      by ANY player when server says
-      started=true.
-
-      Therefore Player 2–6 will
-      automatically enter GAME.
-    */
 
     show("game");
 
@@ -1969,8 +1956,24 @@
         );
       }
 
-      S.host =
-        !!me.isHost;
+      /*
+        IMPORTANT:
+        Recalculate host from server.
+      */
+
+      if (data.room.hostId) {
+
+        S.host =
+          data.room.hostId ===
+          S.myId;
+
+      }
+      else {
+
+        S.host =
+          !!me.isHost;
+
+      }
 
       applyServerRoom(
         data.room
