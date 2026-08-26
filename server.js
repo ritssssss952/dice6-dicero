@@ -882,7 +882,7 @@ function connectEvents(req, res) {
   const code =
     String(
       req.query.code || ""
-    ).toUpperCase();
+    ).trim().toUpperCase();
 
   const playerId =
     String(
@@ -901,8 +901,7 @@ function connectEvents(req, res) {
 
   const player =
     room.players.find(
-      p =>
-        p.id === playerId
+      p => p.id === playerId
     );
 
   if (!player)
@@ -911,6 +910,10 @@ function connectEvents(req, res) {
       404,
       "Player not found."
     );
+
+  /* =====================================================
+     SSE CONNECTION
+     ===================================================== */
 
   res.writeHead(
     200,
@@ -932,7 +935,43 @@ function connectEvents(req, res) {
     }
   );
 
+  /*
+    IMPORTANT:
+    Force headers to be sent immediately.
+    This prevents Render/proxy buffering from
+    delaying realtime game events.
+  */
+
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
+
+  /*
+    Send an immediate SSE comment.
+    This establishes the realtime stream
+    immediately for every player.
+  */
+
+  try {
+    res.write(
+      "retry: 2000\n\n"
+    );
+
+    res.write(
+      ": connected\n\n"
+    );
+  }
+  catch {}
+
+  /* =====================================================
+     REGISTER CLIENT
+     ===================================================== */
+
   room.clients.add(res);
+
+  /* =====================================================
+     CONNECTED EVENT
+     ===================================================== */
 
   sendEvent(
     res,
@@ -942,26 +981,49 @@ function connectEvents(req, res) {
     }
   );
 
+  /* =====================================================
+     SEND CURRENT ROOM STATE
+     ===================================================== */
+
   sendEvent(
     res,
     "state",
     publicRoom(room)
   );
 
+  /* =====================================================
+     HEARTBEAT
+     ===================================================== */
+
   const heartbeat =
     setInterval(
       () => {
 
         try {
+
           res.write(
-            ": heartbeat\n\n"
+            `: heartbeat ${Date.now()}\n\n`
+          );
+
+        }
+        catch {
+
+          clearInterval(
+            heartbeat
+          );
+
+          room.clients.delete(
+            res
           );
         }
-        catch {}
 
       },
-      15000
+      10000
     );
+
+  /* =====================================================
+     DISCONNECT
+     ===================================================== */
 
   req.on(
     "close",
@@ -974,298 +1036,25 @@ function connectEvents(req, res) {
       room.clients.delete(
         res
       );
+
+      try {
+        res.end();
+      }
+      catch {}
+    }
+  );
+
+  res.on(
+    "error",
+    () => {
+
+      clearInterval(
+        heartbeat
+      );
+
+      room.clients.delete(
+        res
+      );
     }
   );
 }
-
-/* =========================================================
-   HTTP SERVER
-   ========================================================= */
-
-const server =
-  http.createServer(
-    async (req, res) => {
-
-      try {
-
-        const url =
-          new URL(
-            req.url,
-            `http://${
-              req.headers.host ||
-              "localhost"
-            }`
-          );
-
-        /* CORS */
-
-        if (
-          req.method ===
-          "OPTIONS"
-        ) {
-
-          res.writeHead(
-            204,
-            {
-              "Access-Control-Allow-Origin":
-                "*",
-
-              "Access-Control-Allow-Methods":
-                "GET,POST,OPTIONS",
-
-              "Access-Control-Allow-Headers":
-                "Content-Type"
-            }
-          );
-
-          return res.end();
-        }
-
-        /* HEALTH */
-
-        if (
-          req.method === "GET" &&
-          url.pathname === "/health"
-        ) {
-
-          return json(
-            res,
-            200,
-            {
-              ok: true,
-              game: "DICE 6",
-              rooms: rooms.size
-            }
-          );
-        }
-
-        /* CREATE */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/create"
-        ) {
-
-          return await createRoom(
-            req,
-            res
-          );
-        }
-
-        /* JOIN */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/join"
-        ) {
-
-          return await joinRoom(
-            req,
-            res
-          );
-        }
-
-        /* READY */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/ready"
-        ) {
-
-          return await readyPlayer(
-            req,
-            res
-          );
-        }
-
-        /* START */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/start"
-        ) {
-
-          return await startGame(
-            req,
-            res
-          );
-        }
-
-        /* ROLL */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/roll"
-        ) {
-
-          return await rollDice(
-            req,
-            res
-          );
-        }
-
-        /* RESTART */
-
-        if (
-          req.method === "POST" &&
-          url.pathname ===
-            "/api/restart"
-        ) {
-
-          return await restartGame(
-            req,
-            res
-          );
-        }
-
-        /* STATE */
-
-        if (
-          req.method === "GET" &&
-          url.pathname ===
-            "/api/state"
-        ) {
-
-          return roomState(
-            req,
-            res
-          );
-        }
-
-        /* REALTIME */
-
-        if (
-          req.method === "GET" &&
-          url.pathname ===
-            "/api/events"
-        ) {
-
-          return connectEvents(
-            req,
-            res
-          );
-        }
-
-        /* =================================================
-           STATIC FILES
-           ================================================= */
-
-        let requestPath =
-          decodeURIComponent(
-            url.pathname
-          );
-
-        if (
-          requestPath === "/"
-        ) {
-          requestPath =
-            "/index.html";
-        }
-
-        const filePath =
-          path.resolve(
-            ROOT,
-            "." + requestPath
-          );
-
-        if (
-          filePath !== ROOT &&
-          !filePath.startsWith(
-            ROOT + path.sep
-          )
-        ) {
-
-          res.writeHead(
-            403,
-            {
-              "Content-Type":
-                "text/plain"
-            }
-          );
-
-          return res.end(
-            "Forbidden"
-          );
-        }
-
-        fs.readFile(
-          filePath,
-          (err, data) => {
-
-            if (err) {
-
-              console.log(
-                "FILE NOT FOUND:",
-                filePath
-              );
-
-              res.writeHead(
-                404,
-                {
-                  "Content-Type":
-                    "text/plain"
-                }
-              );
-
-              return res.end(
-                "Not Found"
-              );
-            }
-
-            const ext =
-              path.extname(
-                filePath
-              ).toLowerCase();
-
-            res.writeHead(
-              200,
-              {
-                "Content-Type":
-                  mimeTypes[ext] ||
-                  "application/octet-stream",
-
-                "Cache-Control":
-                  "no-store, no-cache, must-revalidate, proxy-revalidate"
-              }
-            );
-
-            res.end(data);
-          }
-        );
-
-      }
-      catch (err) {
-
-        console.error(
-          "SERVER ERROR:",
-          err
-        );
-
-        return error(
-          res,
-          500,
-          "Internal server error."
-        );
-      }
-    }
-  );
-
-/* =========================================================
-   START SERVER
-   ========================================================= */
-
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-
-    console.log(
-      `DICE 6 server running on port ${PORT}`
-    );
-  }
-);
