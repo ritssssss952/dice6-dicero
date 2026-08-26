@@ -84,6 +84,13 @@ function getRoom(code) {
 function publicRoom(room) {
   return {
     code: room.code,
+
+    /*
+      IMPORTANT:
+      Send the actual host ID to every client.
+    */
+    hostId: room.hostId,
+
     started: room.started,
     turn: room.turn,
     round: room.round,
@@ -509,12 +516,6 @@ async function startGame(req, res) {
     p.alive = true;
   });
 
-  /*
-    IMPORTANT:
-    Broadcast the new STARTED state
-    to every connected player.
-  */
-
   broadcast(room);
 
   broadcastMessage(
@@ -643,11 +644,6 @@ async function rollDice(req, res) {
     );
   }
 
-  /*
-    SERVER decides the dice value.
-    Client cannot control the result.
-  */
-
   const value =
     Math.floor(
       Math.random() * 6
@@ -702,11 +698,6 @@ async function rollDice(req, res) {
         ? winner.slot
         : null
   };
-
-  /*
-    Broadcast updated game state
-    to ALL players.
-  */
 
   broadcast(room);
 
@@ -857,10 +848,6 @@ function connectEvents(req, res) {
     );
   }
 
-  /*
-    SSE HEADERS
-  */
-
   res.writeHead(
     200,
     {
@@ -881,22 +868,12 @@ function connectEvents(req, res) {
     }
   );
 
-  /*
-    IMPORTANT FOR RENDER:
-    Force headers to be sent immediately.
-  */
-
   if (
     typeof res.flushHeaders ===
     "function"
   ) {
     res.flushHeaders();
   }
-
-  /*
-    Tell browser how quickly
-    to reconnect if connection drops.
-  */
 
   try {
     res.write(
@@ -908,16 +885,7 @@ function connectEvents(req, res) {
     );
   } catch {}
 
-  /*
-    Register this player's
-    realtime connection.
-  */
-
   room.clients.add(res);
-
-  /*
-    Connected event.
-  */
 
   sendEvent(
     res,
@@ -927,20 +895,11 @@ function connectEvents(req, res) {
     }
   );
 
-  /*
-    Immediately send current room state.
-  */
-
   sendEvent(
     res,
     "state",
     publicRoom(room)
   );
-
-  /*
-    HEARTBEAT
-    Keeps Render/proxy connection alive.
-  */
 
   const heartbeat =
     setInterval(
@@ -961,10 +920,6 @@ function connectEvents(req, res) {
       },
       10000
     );
-
-  /*
-    PLAYER DISCONNECT
-  */
 
   req.on(
     "close",
@@ -1014,10 +969,6 @@ const server =
             }`
           );
 
-        /* =================================================
-           CORS
-           ================================================= */
-
         if (
           req.method ===
           "OPTIONS"
@@ -1039,10 +990,6 @@ const server =
           return res.end();
         }
 
-        /* =================================================
-           HEALTH
-           ================================================= */
-
         if (
           req.method === "GET" &&
           url.pathname === "/health"
@@ -1058,10 +1005,6 @@ const server =
           );
         }
 
-        /* =================================================
-           CREATE
-           ================================================= */
-
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1072,10 +1015,6 @@ const server =
             res
           );
         }
-
-        /* =================================================
-           JOIN
-           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1088,10 +1027,6 @@ const server =
           );
         }
 
-        /* =================================================
-           READY
-           ================================================= */
-
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1102,10 +1037,6 @@ const server =
             res
           );
         }
-
-        /* =================================================
-           START
-           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1118,10 +1049,6 @@ const server =
           );
         }
 
-        /* =================================================
-           ROLL
-           ================================================= */
-
         if (
           req.method === "POST" &&
           url.pathname ===
@@ -1132,10 +1059,6 @@ const server =
             res
           );
         }
-
-        /* =================================================
-           RESTART
-           ================================================= */
 
         if (
           req.method === "POST" &&
@@ -1148,10 +1071,6 @@ const server =
           );
         }
 
-        /* =================================================
-           STATE
-           ================================================= */
-
         if (
           req.method === "GET" &&
           url.pathname ===
@@ -1163,10 +1082,6 @@ const server =
           );
         }
 
-        /* =================================================
-           REALTIME SSE
-           ================================================= */
-
         if (
           req.method === "GET" &&
           url.pathname ===
@@ -1177,10 +1092,6 @@ const server =
             res
           );
         }
-
-        /* =================================================
-           STATIC FILES
-           ================================================= */
 
         let requestPath =
           decodeURIComponent(
@@ -1199,10 +1110,6 @@ const server =
             ROOT,
             "." + requestPath
           );
-
-        /*
-          SECURITY CHECK
-        */
 
         if (
           filePath !== ROOT &&
